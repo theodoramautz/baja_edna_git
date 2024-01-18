@@ -6,6 +6,10 @@
 .RData
 .RDataTmp
 
+# Data
+data/*
+!data/README
+
 # User-specific files
 .Ruserdata
 
