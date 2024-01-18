@@ -1,2 +1,2 @@
 # baja_edna_git
-Baja eDNA git repository for code
+Baja eDNA project git repository for code. 
