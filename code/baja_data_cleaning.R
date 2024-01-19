@@ -4,8 +4,8 @@ library(ggplot2)
 library(here)
 
 # Read the csv files into a data frame
-baja_asv_df <- read.csv(here("edna_data", "BAJALIB_MFU_ASV_table.csv"))
-baja_taxonomy_df <- read.csv(here("edna_data", "BAJALIB_MFU_taxonomy_output.csv"))
+baja_asv_df <- read.csv(here("data", "edna_data", "BAJALIB_MFU_ASV_table.csv"))
+baja_taxonomy_df <- read.csv(here("data", "edna_data", "BAJALIB_MFU_taxonomy_output.csv"))
 
 # Combine the data frames based on the common column
 combined_baja_df <- left_join(baja_asv_df, baja_taxonomy_df, by = "Hash")
@@ -19,7 +19,7 @@ unique_samples <- unique(sample_name)
 print(unique_samples)
 
 # Read UD index names csv file
-ud_index_df <- read.csv(here("edna_data", "Bajalib_nextera_ud_indexes.xlsx - Baja library index.csv"))
+ud_index_df <- read.csv(here("data", "edna_data", "Bajalib_nextera_ud_indexes.xlsx - Baja library index.csv"))
 
 # Remove extra parts of name from Sample_name column in combined_baja_sorted_df
 Sample_name <- combined_baja_sorted_df$Sample_name
@@ -38,7 +38,7 @@ Baja_ID_sorted_df <- appended_combined_baja_sorted_df[order(appended_combined_ba
 # Add locations to Baja sample ID spreadsheet
 # First manually rename first column of 'eDNA Explore Baja REEF 2022 - All Data.csv' to "sample"
 # Also manually find and replace "El Lavadero (Las Animas) " with a space at the end to get rid of space at the end
-baja_metadata_df <- read.csv(here("edna_data", "eDNA Explore Baja REEF 2022 - All Data.csv"))
+baja_metadata_df <- read.csv(here("data", "edna_data", "eDNA Explore Baja REEF 2022 - All Data.csv"))
 location_column <- baja_metadata_df[c("sample", "Site")]
 # Remove BRPF- and leading 0's from those columns
 location_column$sample <- sub("BRPF-", "", location_column$sample)
@@ -67,8 +67,13 @@ secondcleaned_eDNA_df <- firstcleaned_eDNA_df %>%
 finalcleaned_eDNA_df <- secondcleaned_eDNA_df %>%
   mutate(Site_ID = paste0("Site ", dense_rank(Site)))
 
+# Specify folder to write files to
+folder <- here("data")
+path1 <- here::here(folder, "merged_baja.csv")
+
 # Write as csv file
-write.csv(finalcleaned_eDNA_df, "merged_baja.csv", row.names=FALSE)
+write.csv(finalcleaned_eDNA_df, file=path1, row.names=FALSE)
 
 # Save the workspace to a .RData file
-save.image("baja_data_cleaning.RData")
+path2 <- here::here(folder, "baja_data_cleaning.RData")
+save.image(file=path2)

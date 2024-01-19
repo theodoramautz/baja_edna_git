@@ -4,9 +4,9 @@ library(ggplot2)
 library(here)
 
 # Read REEF csv files
-reefsurvey_species <- read.csv(here("reef_data", "TEPspecies-5.csv"))
-reefsurvey_geo <- read.csv(here("reef_data", "Bajageog.csv"))
-reefsurvey <- read.csv(here("reef_data", "ExploreBaja22.csv"))
+reefsurvey_species <- read.csv(here("data", "reef_data", "TEPspecies-5.csv"))
+reefsurvey_geo <- read.csv(here("data", "reef_data", "Bajageog.csv"))
+reefsurvey <- read.csv(here("data", "reef_data", "ExploreBaja22.csv"))
 
 # Combine data frames by species
 merged1_reef_survey <- left_join(reefsurvey, reefsurvey_species, by = "species")
@@ -32,12 +32,15 @@ merged_reef_survey <- merged3_reef_survey %>%
   ))
 
 # Add habitat description to each site
-reef_habitat_types <- read.csv(here("reef_data", "REEF habitat types.csv"))
+reef_habitat_types <- read.csv(here("data", "reef_data", "REEF habitat types.csv"))
 merged_reef_survey$Description <- reef_habitat_types$Description[match(merged3_reef_survey$Habitat, reef_habitat_types$Habitat)]
 
 # Write to .csv
-write.csv(merged_reef_survey, "merged_reef.csv", row.names=FALSE)
+folder <- here("data")
+path3 <- here::here(folder, "merged_reef.csv")
+write.csv(merged_reef_survey, file=path3, row.names=FALSE)
 
 # Save the workspace to a .RData file
-save.image("reef_data_cleaning.RData")
+path4 <- here::here(folder, "reef_data_cleaning.RData")
+save.image(file=path4)
 

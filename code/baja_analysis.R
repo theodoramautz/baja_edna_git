@@ -17,8 +17,8 @@ library(tidyr)
 library(tidyverse)
 
 # Load the workspace from the .RData file
-load("baja_data_cleaning.RData")
-load("reef_data_cleaning.RData")
+load(here("data", "baja_data_cleaning.RData"))
+load(here("data", "reef_data_cleaning.RData"))
 
 ############################################################################################
 # EDNA SPECIES
