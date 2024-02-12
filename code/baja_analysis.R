@@ -27,6 +27,7 @@ load(here("data", "reef_data_cleaning.RData"))
 eDNA_species <- finalcleaned_eDNA_df$Species
 eDNA_species_df <- as.data.frame(eDNA_species)
 eDNA_species_number <- na.omit(eDNA_species_df)
+eDNA_species_list <- as.data.frame(unique(eDNA_species_number))
 
 # Make a bar chart with taxa counts per sample
 diver_taxa_counts <- table(finalcleaned_eDNA_df$sample)
@@ -93,6 +94,9 @@ print(s)
 common_species <- intersect(eDNA_species, REEF_species)
 common_species_df <- as.data.frame(common_species)
 length(common_species)
+
+# See which species are in eDNA that were not in REEF surveys
+in_eDNA_notin_REEF_df <- anti_join(eDNA_species_list, common_species_df, by = c("eDNA_species"="common_species"))
 
 # See how many of those common species are in the most abundant REEF species list
 abundant_REEF_species <- species_frequency_filtered$Var1

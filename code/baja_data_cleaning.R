@@ -4,8 +4,8 @@ library(ggplot2)
 library(here)
 
 # Read the csv files into a data frame
-baja_asv_df <- read.csv(here("data", "edna_data", "BAJALIB_MFU_ASV_table.csv"))
-baja_taxonomy_df <- read.csv(here("data", "edna_data", "BAJALIB_MFU_taxonomy_output.csv"))
+baja_asv_df <- read.csv(here("data", "edna_data", "new_edna_data", "BAJALIB-RCRUX-V2_MFU_ASV_table.csv"))
+baja_taxonomy_df <- read.csv(here("data", "edna_data", "new_edna_data", "BAJALIB-RCRUX-V2_MFU_taxonomy_output.csv"))
 
 # Combine the data frames based on the common column
 combined_baja_df <- left_join(baja_asv_df, baja_taxonomy_df, by = "Hash")
