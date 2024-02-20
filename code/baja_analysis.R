@@ -15,6 +15,7 @@ library(lattice)
 library(vegan)
 library(tidyr)
 library(tidyverse)
+library(here)
 
 # Load the workspace from the .RData file
 load(here("data", "baja_data_cleaning.RData"))
