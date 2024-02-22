@@ -7,6 +7,7 @@ library(here)
 reefsurvey_species <- read.csv(here("data", "reef_data", "TEPspecies-5.csv"))
 reefsurvey_geo <- read.csv(here("data", "reef_data", "Bajageog.csv"))
 reefsurvey <- read.csv(here("data", "reef_data", "ExploreBaja22.csv"))
+sites_lat_lon <- read.csv(here("data","reef_data", "Bajageog Google maps.csv"))
 
 # Combine data frames by species
 merged1_reef_survey <- left_join(reefsurvey, reefsurvey_species, by = "species")
@@ -33,7 +34,11 @@ merged_reef_survey <- merged3_reef_survey %>%
 
 # Add habitat description to each site
 reef_habitat_types <- read.csv(here("data", "reef_data", "REEF habitat types.csv"))
-merged_reef_survey$Description <- reef_habitat_types$Description[match(merged3_reef_survey$Habitat, reef_habitat_types$Habitat)]
+merged_reef_survey$Description <- reef_habitat_types$Description[match(merged_reef_survey$Habitat, reef_habitat_types$Habitat)]
+
+# Add lat and lon to sites
+merged_reef_survey <- merged_reef_survey %>%
+  left_join(sites_lat_lon, by = "Site_ID")
 
 # Write to .csv
 folder <- here("data")
