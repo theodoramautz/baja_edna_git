@@ -5,10 +5,6 @@
 library(dplyr)
 library(ggplot2)
 library(ggvenn)
-library(sf)
-library(ocedata)
-library(gsw)
-library(marmap)
 library(grid)
 library(gridExtra)
 library(lattice)
@@ -30,16 +26,22 @@ eDNA_species_df <- as.data.frame(eDNA_species)
 eDNA_species_number <- na.omit(eDNA_species_df)
 eDNA_species_list <- as.data.frame(unique(eDNA_species_number))
 
-# Make a bar chart with taxa counts per sample
-diver_taxa_counts <- table(finalcleaned_eDNA_df$sample)
-diver_taxa_counts_df <- as.data.frame(diver_taxa_counts)
-o <- ggplot(diver_taxa_counts_df, aes(x = Var1, y = Freq)) +
+# Make a bar chart with ASV counts per sample
+sample_asv_counts <- table(finalcleaned_eDNA_df$sample)
+sample_asv_counts_df <- as.data.frame(sample_asv_counts)
+o <- ggplot(sample_asv_counts_df, aes(x = Var1, y = Freq)) +
   geom_bar(stat = "identity") +
   theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1)) +
-  labs(y = "Number of Taxa", x = "Sample") +
+  labs(y = "Number of ASVs", x = "Sample") +
   theme(plot.title = element_text(hjust = 0.5)) +
-  ggtitle("Taxa Counts Per eDNA Sample")
+  ggtitle("Number of ASVs Per eDNA Sample")
 print(o)
+
+# Count how many unique samples had ASVs at all
+total_unique_samples <- finalcleaned_eDNA_df %>%
+  distinct(sample) %>%
+  count()
+print(total_unique_samples)
 
 # Print bar graph of sighted species in eDNA
 t <- ggplot(eDNA_species_number, aes(x=reorder(eDNA_species, -table(eDNA_species)[eDNA_species]))) +
@@ -110,9 +112,13 @@ length(common_abundant_species)
 eDNA_list <- unique(eDNA_species_number$eDNA_species)
 REEF_list <- as.character(unique(REEF_species_df$REEF_species))
 both_species <- list(eDNA = eDNA_list, REEF = REEF_list)
-ggvenn(both_species, columns = c("eDNA", "REEF"), stroke_size = 0.5, fill_color = c("seagreen3", "plum"))
-      
-
+venn_plot <- ggvenn(both_species, columns = c("eDNA", "REEF"), 
+                    stroke_size = 1, 
+                    set_name_color = "black",
+                    set_name_size = 8,
+                    text_color = "black",
+                    text_size = 5, fill_color = c("seagreen3", "plum"))
+print(venn_plot)
 ############################################################################################
 # SITES
 ############################################################################################
