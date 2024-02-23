@@ -35,15 +35,16 @@ appended_combined_baja_sorted_df$sample <- as.numeric(appended_combined_baja_sor
 # Order by Baja sample ID
 Baja_ID_sorted_df <- appended_combined_baja_sorted_df[order(appended_combined_baja_sorted_df$sample),]
 
-# Add locations to Baja sample ID spreadsheet
+# Add locations and max depth to Baja sample ID spreadsheet
 # First manually rename first column of 'eDNA Explore Baja REEF 2022 - All Data.csv' to "sample"
+# And also "Max Depth (feet)" to "MaxDepth"
 # Also manually find and replace "El Lavadero (Las Animas) " with a space at the end to get rid of space at the end
 baja_metadata_df <- read.csv(here("data", "edna_data", "eDNA Explore Baja REEF 2022 - All Data.csv"))
-location_column <- baja_metadata_df[c("sample", "Site")]
+location_depth_columns <- baja_metadata_df[c("sample", "Site", "MaxDepth")]
 # Remove BRPF- and leading 0's from those columns
-location_column$sample <- sub("BRPF-", "", location_column$sample)
-location_column$sample <- sub("^0+", "", location_column$sample)
-appended_locations_df <- merge(Baja_ID_sorted_df, location_column, all.x = TRUE)
+location_depth_columns$sample <- sub("BRPF-", "", location_depth_columns$sample)
+location_depth_columns$sample <- sub("^0+", "", location_depth_columns$sample)
+appended_locations_df <- merge(Baja_ID_sorted_df, location_depth_columns, all.x = TRUE)
 
 # Remove terrestrial species
 terrestrial_species <- c("Homo sapiens", "Sus scrofa", "Bos taurus", "Felis catus")
