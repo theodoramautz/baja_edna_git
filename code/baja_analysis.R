@@ -264,51 +264,50 @@ scores(nmds_result_eDNA) %>%
 
 ### REEF ###
 # Take the data I need for NMDS
-nmds_REEF_subset <- merged_reef_survey[, c("Form", "scientificname", "Abundance")]
+# nmds_REEF_subset <- merged_reef_survey[, c("Form", "scientificname", "Abundance")]
 
 # Filter data to retain rows with the highest Abundance within each group (bc there are duplicates
 # for scientificname and Form due to separate entries for juveniles / adults of certain species)
-nmds_REEF_subset <- merged_reef_survey %>%
-  group_by(Form, scientificname) %>%
-  arrange(desc(Abundance)) %>%
-  slice(1) %>%
-  ungroup() %>%
-  select(Form, scientificname, Abundance)
-
-# Convert Form and Abundance to appropriate data types
-nmds_REEF_subset$Form <- as.numeric(nmds_REEF_subset$Form)
-nmds_REEF_subset$Abundance <- as.integer(nmds_REEF_subset$Abundance)
-
-# Now make a dataframe where each row is a form, each column is a species, and numbers in
-# each cell are Abundance
-nmds_matrix_REEF <- pivot_wider(data = nmds_REEF_subset,
-                                names_from = scientificname,
-                                values_from = Abundance,
-                                values_fill = 0)  # replace NAs with 0s
-
-# Calculate the dissimilarity matrix
-diss_matrix_REEF <- vegdist(nmds_matrix_REEF, method = "bray")
-
-# Perform & plot NMDS
-nmds_result_REEF <- metaMDS(diss_matrix_REEF, k = 2)
-plot_nmds_REEF <- plot(nmds_result_REEF)
-
-# Add metadata to plot
-# Make new dataframe with sample & site info
-nmds_site_REEF <- merged_reef_survey %>%
-  select(Form, Site_ID) %>%
-  distinct() %>%
-  arrange(Form) %>%
-  mutate(Form = as.character(Form))
-# nmds_coords <- scores(nmds_result, display = "sites")
-
-scores(nmds_result_REEF) %>%
-  as_tibble(rownames="Form") %>%
-  inner_join(., nmds_site_REEF, by = "Form") %>%
-  ggplot(aes(x=NMDS1, y=NMDS2, color=Site_ID)) +
-  geom_point()+
-  theme_classic()
-
+# nmds_REEF_subset <- merged_reef_survey %>%
+#   group_by(Form, scientificname) %>%
+#   arrange(desc(Abundance)) %>%
+#   slice(1) %>%
+#   ungroup() %>%
+#   select(Form, scientificname, Abundance)
+# 
+# # Convert Form and Abundance to appropriate data types
+# nmds_REEF_subset$Form <- as.numeric(nmds_REEF_subset$Form)
+# nmds_REEF_subset$Abundance <- as.integer(nmds_REEF_subset$Abundance)
+# 
+# # Now make a dataframe where each row is a form, each column is a species, and numbers in
+# # each cell are Abundance
+# nmds_matrix_REEF <- pivot_wider(data = nmds_REEF_subset,
+#                                 names_from = scientificname,
+#                                 values_from = Abundance,
+#                                 values_fill = 0)  # replace NAs with 0s
+# 
+# # Calculate the dissimilarity matrix
+# diss_matrix_REEF <- vegdist(nmds_matrix_REEF, method = "bray")
+# 
+# # Perform & plot NMDS
+# nmds_result_REEF <- metaMDS(diss_matrix_REEF, k = 2)
+# plot_nmds_REEF <- plot(nmds_result_REEF)
+# 
+# # Add metadata to plot
+# # Make new dataframe with sample & site info
+# nmds_site_REEF <- merged_reef_survey %>%
+#   select(Form, Site_ID) %>%
+#   distinct() %>%
+#   arrange(Form) %>%
+#   mutate(Form = as.character(Form))
+# # nmds_coords <- scores(nmds_result, display = "sites")
+# 
+# scores(nmds_result_REEF) %>%
+#   as_tibble(rownames="Form") %>%
+#   inner_join(., nmds_site_REEF, by = "Form") %>%
+#   ggplot(aes(x=NMDS1, y=NMDS2, color=Site_ID)) +
+#   geom_point()+
+#   theme_classic()
 
 ############################################################################################
 # MAP
