@@ -17,6 +17,41 @@ library(here)
 load(here("data", "baja_data_cleaning.RData"))
 load(here("data", "reef_data_cleaning.RData"))
 
+# Add habitat type, lat, lon from REEF to eDNA file
+# Find the most common Description for each Site_ID in merged_reef_survey
+most_common_desc <- merged_reef_survey %>%
+  group_by(Site_ID, Description) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count)) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(Site_ID, Most_Common_Description = Description)
+
+# Join most_common_desc with finalcleaned_eDNA_df to include the most common Description
+finalcleaned_eDNA_df <- left_join(finalcleaned_eDNA_df, 
+                                  most_common_desc, 
+                                  by = "Site_ID")
+
+# Join merged_reef_survey to include lat and lon
+finalcleaned_eDNA_df <- left_join(finalcleaned_eDNA_df, 
+                                  merged_reef_survey %>% 
+                                    select(Site_ID, lat, lon) %>% 
+                                    distinct(), 
+                                  by = "Site_ID")
+
+# Create metadata df without ASVs or taxa
+edna_metadata_df <- finalcleaned_eDNA_df %>%
+  select(-c(Label:Species))
+
+# Condense into one row per sample
+condensed_metadata <- edna_metadata_df %>%
+  group_by(sample) %>%
+  summarize_all(list(~ first(.)))
+
+folder <- here("data")
+path1 <- here::here(folder, "edna_metadata.csv")
+write.csv(condensed_metadata, file=path1, row.names=FALSE)
+
 ############################################################################################
 # EDNA SPECIES
 ############################################################################################
@@ -115,7 +150,7 @@ both_species <- list(eDNA = eDNA_list, REEF = REEF_list)
 venn_plot <- ggvenn(both_species, columns = c("eDNA", "REEF"), 
                     stroke_size = 1, 
                     set_name_color = "black",
-                    set_name_size = 8,
+                    set_name_size = 10,
                     text_color = "black",
                     text_size = 5, fill_color = c("seagreen3", "plum"))
 print(venn_plot)
@@ -233,20 +268,16 @@ nmds_matrix_eDNA <- pivot_wider(data = nmds_eDNA_subset,
                                 values_fill = 0)  # replace NAs with 0s
 
 # Transform data using Wisconsin double-standardization
-nmds_matrix_eDNA_standardized <- decostand(nmds_matrix_eDNA, "max", na.rm=FALSE)
+nmds_matrix_eDNA_standardized <- wisconsin(nmds_matrix_eDNA)
 
-# Transform data manually
-max_matrix <- max(nmds_matrix_eDNA)
-normalized_nmds_matrix_eDNA <- nmds_matrix_eDNA / max_matrix
+# Calculate the dissimilarity matrix with Wisconsin
+diss_matrix_eDNA <- vegdist(nmds_matrix_eDNA_standardized, method = "bray")
 
-# Calculate the dissimilarity matrix
-diss_matrix_eDNA <- vegdist(normalized_nmds_matrix_eDNA, method = "bray")
-
-# Perform & plot NMDS
+# Perform & plot NMDS Wisconsin
 nmds_result_eDNA <- metaMDS(diss_matrix_eDNA, k = 2)
 plot_nmds_eDNA <- plot(nmds_result_eDNA)
 
-# Add metadata to plot
+# Add metadata to plot Wisconsin
 # Make new dataframe with sample & site info
 nmds_site_eDNA <- finalcleaned_eDNA_df %>%
   select(sample, Site_ID) %>%
@@ -259,8 +290,35 @@ scores(nmds_result_eDNA) %>%
   as_tibble(rownames="sample") %>%
   inner_join(., nmds_site_eDNA, by = "sample") %>%
   ggplot(aes(x=NMDS1, y=NMDS2, color=Site_ID)) +
-    geom_point()+
+  geom_point()+
   theme_classic()
+
+# # Transform data manually
+# max_matrix <- max(nmds_matrix_eDNA)
+# normalized_nmds_matrix_eDNA <- nmds_matrix_eDNA / max_matrix
+# 
+# # Calculate the dissimilarity matrix with manual
+# diss_matrix_eDNA <- vegdist(normalized_nmds_matrix_eDNA, method = "bray")
+# 
+# # Perform & plot NMDS manual
+# nmds_result_eDNA <- metaMDS(diss_matrix_eDNA, k = 2)
+# plot_nmds_eDNA <- plot(nmds_result_eDNA)
+# 
+# # Add metadata to plot manual
+# # Make new dataframe with sample & site info
+# nmds_site_eDNA <- finalcleaned_eDNA_df %>%
+#   select(sample, Site_ID) %>%
+#   distinct() %>%
+#   arrange(sample) %>%
+#   mutate(sample = as.character(sample))
+# # nmds_coords <- scores(nmds_result, display = "sites")
+# 
+# scores(nmds_result_eDNA) %>%
+#   as_tibble(rownames="sample") %>%
+#   inner_join(., nmds_site_eDNA, by = "sample") %>%
+#   ggplot(aes(x=NMDS1, y=NMDS2, color=Site_ID)) +
+#     geom_point()+
+#   theme_classic()
 
 ### REEF ###
 # Take the data I need for NMDS

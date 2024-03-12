@@ -4,8 +4,16 @@ library(ggplot2)
 library(here)
 
 # Read the csv files into a data frame
-baja_asv_df <- read.csv(here("data", "edna_data", "new_edna_data", "BAJALIB-RCRUX-V2_MFU_ASV_table.csv"))
-baja_taxonomy_df <- read.csv(here("data", "edna_data", "new_edna_data", "BAJALIB-RCRUX-V2_MFU_taxonomy_output.csv"))
+baja_asv_df <- read.csv(here("data", "sequencing_data", "Baja_MiFish_ASVs.csv"))
+baja_taxonomy_df <- read.csv(here("data", "sequencing_data", "Baja_MiFish_taxa_table.csv"))
+baja_hash_df <- read.csv(here("data", "sequencing_data","Baja_MiFish_hash_key.csv"))
+
+# Rename column in taxonomy to "Sequence"
+baja_taxonomy_df <- baja_taxonomy_df %>%
+  rename(Sequence = X)
+
+# Add hashes to taxonomy df
+baja_taxonomy_df <- left_join(baja_taxonomy_df, baja_hash_df, by = "Sequence")
 
 # Combine the data frames based on the common column
 combined_baja_df <- left_join(baja_asv_df, baja_taxonomy_df, by = "Hash")
@@ -22,11 +30,14 @@ print(unique_samples)
 ud_index_df <- read.csv(here("data", "edna_data", "Bajalib_nextera_ud_indexes.xlsx - Baja library index.csv"))
 
 # Remove extra parts of name from Sample_name column in combined_baja_sorted_df
-Sample_name <- combined_baja_sorted_df$Sample_name
-combined_baja_sorted_df$Sample_name <- gsub("MFU-|-d1-1$", "", combined_baja_sorted_df$Sample_name)
+# Sample_name <- combined_baja_sorted_df$Sample_name
+# combined_baja_sorted_df$Sample_name <- gsub("MFU-|-d1-1$", "", combined_baja_sorted_df$Sample_name)
+
+# Remove extra parts of name from Baja_ID_column
+Baja_ID_column <- ud_index_df[c("sample", "Seq_ID")]
+Baja_ID_column$Seq_ID <- gsub("^0+", "", gsub("^BAJA_", "", Baja_ID_column$Seq_ID))
 
 # Append proper Baja sample ID column to combined_baja_sorted_df
-Baja_ID_column <- ud_index_df[c("sample", "Seq_ID")]
 appended_combined_baja_sorted_df <- merge(combined_baja_sorted_df, Baja_ID_column, by.x = "Sample_name", by.y = "Seq_ID", all.x = TRUE)
 
 # Change "sample" values from characters to numbers
@@ -40,17 +51,23 @@ Baja_ID_sorted_df <- appended_combined_baja_sorted_df[order(appended_combined_ba
 # Also manually find and replace "El Lavadero (Las Animas) " with a space at the end to get rid of space at the end
 baja_metadata_df <- read.csv(here("data", "edna_data", "eDNA Explore Baja REEF 2022 - All Data.csv"))
 location_column <- baja_metadata_df[c("sample", "Site")]
+# And also other column titles to be just 1 word with underscores
+# And dive time, transport time, time of collection
+# Also manually find and replace "El Lavadero (Las Animas) " with a space at the end to get rid of space at the end
+baja_metadata_df <- read.csv(here("data", "edna_data", "eDNA Explore Baja REEF 2022 - All Data.csv"))
+location_depth_columns <- baja_metadata_df[c("sample", "Site", "Diver", "TimeofCollection_localtime", "BottomExposureTime_minutes", "MaxDepth", "TransportTime")]
+
 # Remove BRPF- and leading 0's from those columns
 location_column$sample <- sub("BRPF-", "", location_column$sample)
 location_column$sample <- sub("^0+", "", location_column$sample)
 appended_locations_df <- merge(Baja_ID_sorted_df, location_column, all.x = TRUE)
 
 # Remove terrestrial species
-terrestrial_species <- c("Homo sapiens", "Sus scrofa", "Bos taurus", "Felis catus")
-firstcleaned_eDNA_df <- appended_locations_df %>% filter(!Species %in% terrestrial_species)
+# terrestrial_species <- c("Homo sapiens", "Sus scrofa", "Bos taurus", "Felis catus")
+# firstcleaned_eDNA_df <- appended_locations_df %>% filter(!Species %in% terrestrial_species)
 
 # Rename sites to match REEF site names
-secondcleaned_eDNA_df <- firstcleaned_eDNA_df %>%
+secondcleaned_eDNA_df <- appended_locations_df %>%
   mutate(Site = case_when(
     Site == "Arecife del Pardito (near Isla Coyote)" ~ "Parrotfish City (Reef East of Isla Coyote)",
     Site == "Cabeza de Gorila (Isla Coronado)" ~ "Cabeza de Gorila / Gorilla Head (Isla Coronado)",

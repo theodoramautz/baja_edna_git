@@ -1,12 +1,12 @@
 ---
 title: "dada2_tutorial"
-output: html_document
 date: "2024-02-09"
 ---
 
 ```{r libraries}
 library(tidyverse)
 library(dada2)
+library(dplyr)
 library(digest)
 library(seqinr)
 library(here)
@@ -65,9 +65,9 @@ plotErrors(errF, nominalQ=TRUE)
 ```{r sample inference}
 ## If you get an error suggesting some of your samples had zero reads after filtering, you will have to filter out the empty samples. Here I am filtering out all samples with fewer than 20 reads, which is all three controls (two negative and one positive)
 out_filt <- out %>% base::subset(out[,"reads.out"] > 20)
-sample.names.filt.1 <- sapply(strsplit(rownames(out_filt), "-"), `[`, 1)
-sample.names.filt.2 <- sapply(strsplit(rownames(out_filt), "-"), `[`, 2)
-sample.names.filt <- paste(sample.names.filt.1, sample.names.filt.2, sep="-")
+sample.names.filt.1 <- sapply(strsplit(rownames(out_filt), "_"), `[`, 1)
+sample.names.filt.2 <- sapply(strsplit(rownames(out_filt), "_"), `[`, 2)
+sample.names.filt <- paste(sample.names.filt.1, sample.names.filt.2, sep="_")
 
 # Rename your filtered samples based on the new list of sample names
 filtFs <- file.path(path, "dada2_filtered", paste0(sample.names.filt, "_F_filt.fastq.gz"))
@@ -125,7 +125,7 @@ head(track)
 ```{r assign taxonomy}
 # Now we are ready to assign taxonomy to our ASVs. Change the database file name to include the path on your system.
 
-taxa <- assignTaxonomy(cleaned.seqtab.nochim, "12S_efc_derep_and_clean-DADA2.fasta", tryRC=TRUE, multithread=TRUE)
+taxa <- assignTaxonomy(cleaned.seqtab.nochim, "/Users/theodoramautz/Desktop/SIO/Research/baja_edna/baja_edna_git/data/baja_raw_sequences/12S_efc_derep_and_clean-DADA2.fasta", tryRC=TRUE, multithread=TRUE)
 
 # Removing sequence rownames for display only
 taxa.print <- taxa 
