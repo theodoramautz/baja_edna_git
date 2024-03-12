@@ -18,18 +18,18 @@ load(here("data", "baja_data_cleaning.RData"))
 load(here("data", "reef_data_cleaning.RData"))
 
 # Add habitat type, lat, lon from REEF to eDNA file
-# Find the most common Description for each Site_ID in merged_reef_survey
-most_common_desc <- merged_reef_survey %>%
-  group_by(Site_ID, Description) %>%
+# Find the most common Habitat for each Site_ID in merged_reef_survey
+most_common_hab <- merged_reef_survey %>%
+  group_by(Site_ID, Habitat) %>%
   summarise(count = n()) %>%
   arrange(desc(count)) %>%
   slice(1) %>%
   ungroup() %>%
-  select(Site_ID, Most_Common_Description = Description)
+  select(Site_ID, Most_Common_Habitat = Habitat)
 
-# Join most_common_desc with finalcleaned_eDNA_df to include the most common Description
+# Join most_common_hab with finalcleaned_eDNA_df to include the most common Description
 finalcleaned_eDNA_df <- left_join(finalcleaned_eDNA_df, 
-                                  most_common_desc, 
+                                  most_common_hab, 
                                   by = "Site_ID")
 
 # Join merged_reef_survey to include lat and lon
