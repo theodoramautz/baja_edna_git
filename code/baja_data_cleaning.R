@@ -7,6 +7,26 @@ library(here)
 baja_asv_df <- read.csv(here("data", "sequencing_data", "Baja_MiFish_ASVs.csv"))
 baja_taxonomy_df <- read.csv(here("data", "sequencing_data", "Baja_MiFish_taxa_table.csv"))
 baja_hash_df <- read.csv(here("data", "sequencing_data","Baja_MiFish_hash_key.csv"))
+baja_reads_df <- read.csv(here("data", "sequencing_data","Baja_MiFish_reads_track.csv"))
+
+### PREPROCESSING ###
+
+## Add BAJA_ to baja_asv_df
+# baja_asv_df$Sample_name <- paste0("BAJA_", baja_asv_df$Sample_name)
+# folder <- here("data", "sequencing_data")
+# path1 <- here::here(folder, "Baja_MiFish_ASVs.csv")
+# write.csv(baja_asv_df, file=path1, row.names=FALSE)
+
+## Add BAJA_ and remove leading 0s to baja_reads_df
+# baja_reads_df <- baja_reads_df %>%
+#   rename(Sample_name = X)
+# baja_reads_df$Sample_name <- sub("^0+", "", baja_reads_df$Sample_name)
+# baja_reads_df$Sample_name <- paste0("BAJA_", baja_reads_df$Sample_name)
+# folder <- here("data", "sequencing_data")
+# path1 <- here::here(folder, "Baja_MiFish_reads_track.csv")
+# write.csv(baja_reads_df, file=path1, row.names=FALSE)
+
+### END PREPROCESSING ###
 
 # Rename column in taxonomy to "Sequence"
 baja_taxonomy_df <- baja_taxonomy_df %>%
@@ -18,49 +38,51 @@ baja_taxonomy_df <- left_join(baja_taxonomy_df, baja_hash_df, by = "Sequence")
 # Combine the data frames based on the common column
 combined_baja_df <- left_join(baja_asv_df, baja_taxonomy_df, by = "Hash")
 
-# Sort combined_baja_df alphabetically by Sample_name
-combined_baja_sorted_df <- combined_baja_df[order(combined_baja_df$Sample_name),]
-
 # Find every unique Sample name
-sample_name <- combined_baja_sorted_df$Sample_name
+sample_name <- combined_baja_df$Sample_name
 unique_samples <- unique(sample_name)
 print(unique_samples)
 
 # Read UD index names csv file
 ud_index_df <- read.csv(here("data", "edna_data", "Bajalib_nextera_ud_indexes.xlsx - Baja library index.csv"))
 
-# Remove extra parts of name from Sample_name column in combined_baja_sorted_df
-# Sample_name <- combined_baja_sorted_df$Sample_name
-# combined_baja_sorted_df$Sample_name <- gsub("MFU-|-d1-1$", "", combined_baja_sorted_df$Sample_name)
+## Remove extra parts of name from Sample_name column in combined_baja_df
+# Sample_name <- combined_baja_df$Sample_name
+# combined_baja_df$Sample_name <- gsub("MFU-|-d1-1$", "", combined_baja_df$Sample_name)
+# Baja_ID_column$Seq_ID <- gsub("^0+", "", gsub("^BAJA_", "", Baja_ID_column$Seq_ID))
 
-# Remove extra parts of name from Baja_ID_column
+# Append proper Baja sample ID column to combined_baja_df
 Baja_ID_column <- ud_index_df[c("sample", "Seq_ID")]
-Baja_ID_column$Seq_ID <- gsub("^0+", "", gsub("^BAJA_", "", Baja_ID_column$Seq_ID))
-
-# Append proper Baja sample ID column to combined_baja_sorted_df
-appended_combined_baja_sorted_df <- merge(combined_baja_sorted_df, Baja_ID_column, by.x = "Sample_name", by.y = "Seq_ID", all.x = TRUE)
+Baja_ID_column$Seq_ID <- gsub("BAJA_", "", Baja_ID_column$Seq_ID) # remove "BAJA_"
+Baja_ID_column$Seq_ID <- sub("^0+", "", Baja_ID_column$Seq_ID) # remove leading 0s
+Baja_ID_column$Seq_ID <- paste0("BAJA_", "", Baja_ID_column$Seq_ID) # readd "BAJA_"
+appended_combined_baja_df <- merge(combined_baja_df, Baja_ID_column, by.x = "Sample_name", by.y = "Seq_ID", all.x = TRUE)
 
 # Change "sample" values from characters to numbers
-appended_combined_baja_sorted_df$sample <- as.numeric(appended_combined_baja_sorted_df$sample)
+# appended_combined_baja_df$sample <- as.numeric(appended_combined_baja_df$sample)
 
 # Order by Baja sample ID
-Baja_ID_sorted_df <- appended_combined_baja_sorted_df[order(appended_combined_baja_sorted_df$sample),]
+# Baja_ID_sorted_df <- appended_combined_baja_df[order(appended_combined_baja_df$sample),]
 
 # Add locations to Baja sample ID spreadsheet
 # First manually rename first column of 'eDNA Explore Baja REEF 2022 - All Data.csv' to "sample"
 # Also manually find and replace "El Lavadero (Las Animas) " with a space at the end to get rid of space at the end
-baja_metadata_df <- read.csv(here("data", "edna_data", "eDNA Explore Baja REEF 2022 - All Data.csv"))
-location_column <- baja_metadata_df[c("sample", "Site")]
 # And also other column titles to be just 1 word with underscores
 # And dive time, transport time, time of collection
-# Also manually find and replace "El Lavadero (Las Animas) " with a space at the end to get rid of space at the end
 baja_metadata_df <- read.csv(here("data", "edna_data", "eDNA Explore Baja REEF 2022 - All Data.csv"))
-location_depth_columns <- baja_metadata_df[c("sample", "Site", "Diver", "TimeofCollection_localtime", "BottomExposureTime_minutes", "MaxDepth", "TransportTime")]
+metadata_columns <- baja_metadata_df[c("sample", "Site", "Diver", "TimeofCollection_localtime", "BottomExposureTime_minutes", "MaxDepth", "TransportTime")]
 
 # Remove BRPF- and leading 0's from those columns
-location_column$sample <- sub("BRPF-", "", location_column$sample)
-location_column$sample <- sub("^0+", "", location_column$sample)
-appended_locations_df <- merge(Baja_ID_sorted_df, location_column, all.x = TRUE)
+metadata_columns$sample <- sub("^BRPF-", "", metadata_columns$sample)
+metadata_columns$sample <- sub("^0+", "", metadata_columns$sample)
+
+# Merge by sample
+# Merge the two data frames based on the "sample" column
+appended_locations_df <- merge(appended_combined_baja_df, metadata_columns, by = "sample", all.x = TRUE)
+
+# Reorder based on sample
+appended_locations_df$sample <- as.numeric(appended_locations_df$sample)
+appended_locations_df <- appended_locations_df[order(appended_locations_df$sample), ]
 
 # Remove terrestrial species
 # terrestrial_species <- c("Homo sapiens", "Sus scrofa", "Bos taurus", "Felis catus")
