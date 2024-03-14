@@ -9,22 +9,23 @@ library(phyloseq); packageVersion("phyloseq")
 library(Biostrings); packageVersion("Biostrings")
 library(ggplot2); packageVersion("ggplot2")
 library(tidyverse)
+library(here)
+library(dplyr)
 
 # Set plot theme to a simple black-and-white design
 theme_set(theme_bw())
 ```
 
 ```{r phyloseq preprocessing}
-# Import your output ASV table from DADA2 (wide format). 
-asvs <- read.csv("03.DADA2/Baja_MiFish_ASVs_wide.csv",
-                row.names=1)
+# Import your output ASV table from DADA2 (wide format).
+asvs <- read.csv(here("data", "sequencing_data", "Baja_MiFish_ASVs_wide.csv"),row.names=1)
 
 # Import your taxonomy table and hash key. We will merge these two files to generate a taxonomy table formatted for phyloseq.
-tax <- read.csv ("03.DADA2/Baja_MiFish_taxa_table.csv")
-hash <- read.csv("03.DADA2/Baja_MiFish_hash_key.csv")
+tax <- read.csv (here("data", "sequencing_data", "Baja_MiFish_taxa_table.csv"))
+hash <- read.csv(here("data", "sequencing_data","Baja_MiFish_hash_key.csv"))
 
 # Import the metadata file. Before importing, make sure the order of your samples in the ASV table matches the order in the metadata table. You can check this in Excel before importing or you can filter tables and edit row names in R, whichever you prefer. I will provide an example of how to do it in R.
-metadata <- read.csv("baja_edna_metadata.csv", row.names=1)
+metadata <- read.csv(here("data", "baja_edna_metadata.csv"), row.names=1)
 ```
 
 ```{r phyloseq format}
@@ -34,9 +35,6 @@ metadata <- read.csv("baja_edna_metadata.csv", row.names=1)
 ASV = otu_table(asvs, taxa_are_rows=TRUE)
 
 # For phyloseq taxonomy, we need to merge the tax and hash tables so that we have a list of hashes with associated taxonomy. 
-
-# First we have to rename the column in the taxonomy table containing the nucleotide sequences.
-tax <- rename(tax, 'Sequence' = 'X')
 
 # Now we can merge on the 'Sequence' column and then drop it from the merged data frame
 tax_ps <- left_join(hash, tax, by='Sequence')
@@ -64,15 +62,15 @@ length(rownames(metadata))
 
 # They are the same! You can take a closer look at the actual names and make sure they are identical if you're concerned, otherwise move on to the next step (line 78).
 
-# IF THE TWO NUMBERS ABOVE ARE DIFFERENT:  Let's make a list of the names we want to keep
-samples.to.keep <- colnames(asvs)
-
-metadata.filt <-filter(metadata, row.names(metadata) %in%
-                                     samples.to.keep)
-
-# Check again that the number of metadata rows matches the number of ASV table columns
-length(colnames(asvs))
-length(rownames(metadata.filt))
+# # IF THE TWO NUMBERS ABOVE ARE DIFFERENT:  Let's make a list of the names we want to keep
+# samples.to.keep <- colnames(asvs)
+# 
+# metadata.filt <-filter(metadata, row.names(metadata) %in%
+#                                      samples.to.keep)
+# 
+# # Check again that the number of metadata rows matches the number of ASV table columns
+# length(colnames(asvs))
+# length(rownames(metadata.filt))
 
 # Convert the metadata table into phyloseq format (use "metadata.filt" instead of "metadata" if you filtered out metadata rows)
 MET <- sample_data(metadata)

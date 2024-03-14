@@ -11,6 +11,11 @@ baja_reads_df <- read.csv(here("data", "sequencing_data","Baja_MiFish_reads_trac
 
 ### PREPROCESSING ###
 
+# First manually rename some things in 'eDNA Explore Baja REEF 2022 - All Data.csv':
+# First column rename to "sample"; 
+# Find and replace "El Lavadero (Las Animas) " to get rid of space at the end;
+# Rename other column titles to be just 1 word with underscores
+
 ## Add BAJA_ to baja_asv_df
 # baja_asv_df$Sample_name <- paste0("BAJA_", baja_asv_df$Sample_name)
 # folder <- here("data", "sequencing_data")
@@ -26,11 +31,22 @@ baja_reads_df <- read.csv(here("data", "sequencing_data","Baja_MiFish_reads_trac
 # path1 <- here::here(folder, "Baja_MiFish_reads_track.csv")
 # write.csv(baja_reads_df, file=path1, row.names=FALSE)
 
-### END PREPROCESSING ###
+## Make wide version of ASV
+# current_asv_wide <- baja_asv_df %>% spread(Sample_name, nReads)
+# current_asv_wide[is.na(current_asv_wide)] <- 0
+# current_asv_wide$Label <- NULL
+# folder <- here("data", "sequencing_data")
+# path1 <- here::here(folder, "Baja_MiFish_ASVs_wide.csv")
+# write.csv(current_asv_wide, file=path1)
 
-# Rename column in taxonomy to "Sequence"
-baja_taxonomy_df <- baja_taxonomy_df %>%
-  rename(Sequence = X)
+# # Rename column in taxonomy to "Sequence"
+# baja_taxonomy_df <- baja_taxonomy_df %>%
+#   rename(Sequence = X)
+# folder <- here("data", "sequencing_data")
+# path1 <- here::here(folder, "Baja_MiFish_taxa_table.csv")
+# write.csv(baja_taxonomy_df, file=path1, row.names=FALSE)
+
+### END PREPROCESSING ###
 
 # Add hashes to taxonomy df
 baja_taxonomy_df <- left_join(baja_taxonomy_df, baja_hash_df, by = "Sequence")
@@ -64,11 +80,7 @@ appended_combined_baja_df <- merge(combined_baja_df, Baja_ID_column, by.x = "Sam
 # Order by Baja sample ID
 # Baja_ID_sorted_df <- appended_combined_baja_df[order(appended_combined_baja_df$sample),]
 
-# Add locations to Baja sample ID spreadsheet
-# First manually rename first column of 'eDNA Explore Baja REEF 2022 - All Data.csv' to "sample"
-# Also manually find and replace "El Lavadero (Las Animas) " with a space at the end to get rid of space at the end
-# And also other column titles to be just 1 word with underscores
-# And dive time, transport time, time of collection
+# Add locations, dive time, transport time, time of collection
 baja_metadata_df <- read.csv(here("data", "edna_data", "eDNA Explore Baja REEF 2022 - All Data.csv"))
 metadata_columns <- baja_metadata_df[c("sample", "Site", "Diver", "TimeofCollection_localtime", "BottomExposureTime_minutes", "MaxDepth", "TransportTime")]
 
