@@ -71,7 +71,10 @@ ud_index_df <- read.csv(here("data", "edna_data", "Bajalib_nextera_ud_indexes.xl
 Baja_ID_column <- ud_index_df[c("sample", "Seq_ID")]
 Baja_ID_column$Seq_ID <- gsub("BAJA_", "", Baja_ID_column$Seq_ID) # remove "BAJA_"
 Baja_ID_column$Seq_ID <- sub("^0+", "", Baja_ID_column$Seq_ID) # remove leading 0s
-Baja_ID_column$Seq_ID <- paste0("BAJA_", "", Baja_ID_column$Seq_ID) # readd "BAJA_"
+Baja_ID_column$Seq_ID <- paste0("BAJA_", "", Baja_ID_column$Seq_ID) # re-add "BAJA_"
+# Delete rows after BAJA_135 (which are no longer Baja MiFish samples)
+index <- which(Baja_ID_column$Seq_ID == "BAJA_136")
+Baja_ID_column <- Baja_ID_column[1:(index-1), ]
 appended_combined_baja_df <- merge(combined_baja_df, Baja_ID_column, by.x = "Sample_name", by.y = "Seq_ID", all.x = TRUE)
 
 # Change "sample" values from characters to numbers

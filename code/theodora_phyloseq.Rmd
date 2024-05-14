@@ -1,0 +1,521 @@
+---
+title: "theodora phyloseq"
+output: html_document
+date: "2024-05-09"
+---
+
+```{r phyloseq setup}
+library(phyloseq); packageVersion("phyloseq")
+library(Biostrings); packageVersion("Biostrings")
+library(ggplot2); packageVersion("ggplot2")
+library(tidyverse)
+library(here)
+library(dplyr)
+library(vegan)
+library(here)
+
+# Set plot theme to a simple black-and-white design
+theme_set(theme_bw())
+```
+
+```{r phyloseq preprocessing}
+# Import output files from DADA2 (wide format asv). 
+asvs <- read.csv(here("data", "sequencing_data", "Baja_MiFish_ASVs_wide.csv"),row.names=1)
+tax <- read.csv (here("data", "sequencing_data", "Baja_MiFish_taxa_table.csv"))
+hash <- read.csv(here("data", "sequencing_data","Baja_MiFish_hash_key.csv"))
+
+# Import the metadata file. Check to see if the order of your samples in the ASV table matches the order in the metadata table.
+metadata <- read.csv(here("data", "baja_edna_metadata.csv"), row.names=1)
+```
+
+```{r phyloseq format}
+# Format the ASV and tax tables for phyloseq
+
+# In this case each ASV (taxon) is a row
+ASV = otu_table(asvs, taxa_are_rows=TRUE)
+
+# For phyloseq taxonomy, we need to merge the tax and hash tables so that we have a list of hashes with associated taxonomy. 
+
+# Now we can merge on the 'Sequence' column and then drop it from the merged data frame
+tax_ps <- left_join(hash, tax, by='Sequence')
+tax_ps <- select(tax_ps, -Sequence)
+
+# Convert the hashes to row names and convert the whole data frame to a matrix
+rownames(tax_ps) <- tax_ps$Hash
+tax_ps <- select(tax_ps, -Hash)
+tax_ps_mat <- as.matrix(tax_ps)
+
+# Convert the taxonmy table into phyloseq format
+TAX <- tax_table(tax_ps_mat)
+```
+
+```{r metadata}
+# The Baja metadata row names are not the same as the ASV table column names, so edit to match
+metadata <- metadata[order(rownames(metadata)), ]
+
+# If you removed any samples during DADA2 processing, they need to be removed from the metadata file too
+# Check the number of samples in the ASV table
+length(colnames(asvs))
+# Check the number of samples in the metadata table
+length(rownames(metadata))
+
+# They are the same.
+```
+
+```{r filter metadata}
+# Make a list of the names we want to keep
+samples.to.keep <- colnames(asvs)
+metadata.filt <-filter(metadata, row.names(metadata) %in%
+                                     samples.to.keep)
+
+# Check again that the number of metadata rows matches the number of ASV table columns
+length(colnames(asvs))
+length(rownames(metadata.filt))
+
+# Convert the metadata table into phyloseq format (use "metadata.filt" instead of "metadata" if you filtered out metadata rows)
+MET <- sample_data(metadata)
+```
+
+```{r phyloseq prep}
+# Make the phyloseq object from the ASV table, taxonomy table, and metadata table
+ps <- phyloseq(ASV, MET, TAX)
+
+# Transform data to proportions as appropriate for Bray-Curtis distances
+ps.prop <- transform_sample_counts(ps, function(otu) otu/sum(otu))
+
+# The sample_data has sample names as rownames, but we can add a column with the names as well
+sample_data(ps.prop)['sample.id'] <-
+  row.names(sample_data(ps.prop))
+```
+
+```{r sample summary}
+# Generate some basic read stats: mean, max and min of sample read counts
+smin <- min(sample_sums(ps))
+smean <- mean(sample_sums(ps))
+smax <- max(sample_sums(ps))
+
+## Now let's get an overview of the read distribution across samples using a histogram made by ggplot
+
+# First make a data frame with a column for the read counts of each sample
+sample_sum_df <- data.frame(sum = sample_sums(ps))
+
+# Histogram of sample read counts
+p <- ggplot(sample_sum_df, aes(x = sum)) + 
+  geom_histogram(color = "black", fill = "indianred", binwidth = 2000) +
+  ggtitle("Distribution of sample sequencing depth") + 
+  xlab("Read counts") +
+  ylab("Number of samples") +
+  scale_y_continuous(limits = c(0, 12), expand = c(0,0)) +
+  scale_x_continuous(limits = c(0, 400000), expand = c(0,0))
+
+p
+
+# NOTE: You may get a warning message saying 5 rows of data were removed due to missing values. This is a misleading warning message, none of the data were removed and this plot shows all the sample counts.
+```
+
+```{r phyloseq bar plots with contaminants}
+# Here I am grouping by site
+top20 <- names(sort(taxa_sums(ps.prop),
+                    decreasing=TRUE))[1:20]
+
+ps.top20 <- prune_taxa(top20, ps.prop)
+
+bar <- plot_bar(ps.top20, x="Site_ID", fill="Family") +
+  facet_wrap(~lat_group, scales="free_x")
+
+bar
+
+# Uh oh, looks like we have some non-fish families in here! Filter out these taxa and re-run the analyses.
+```
+
+```{r phyloseq filtertax}
+# Let's filter out the contaminant families
+ps.prop.pruned <- subset_taxa(ps.prop,
+                                Family != "Bovidae")
+ps.prop.pruned <- subset_taxa(ps.prop.pruned,
+                                Family != "Hominidae")
+ps.prop.pruned <- subset_taxa(ps.prop.pruned,
+                                Family != "Suidae")
+ps.prop.pruned <- subset_taxa(ps.prop.pruned,
+                                Family != "Felidae")
+
+# You may have empty samples after removing the contaminants. Remove those empty samples from the data set.
+ps.prop.pruned.v2 <- prune_samples(sample_sums(ps.prop.pruned)>0, 
+                                   ps.prop.pruned)
+
+top20 <- names(sort(taxa_sums(ps.prop.pruned.v2),
+                    decreasing=TRUE))[1:20]
+
+ps.top20 <- prune_taxa(top20, ps.prop.pruned.v2)
+
+bar2 <- plot_bar(ps.top20, x="Site_ID", fill="Family") +
+  facet_wrap(~lat_group, scales="free_x")
+
+bar2
+```
+
+Diversity analyses
+Alpha diversity
+```{r alpha diversity}
+# Plot alpha diversity metrics
+alpha <- plot_richness(ps.prop.pruned.v2, 
+              x="lat_group", 
+              measures=c("Shannon", "Simpson"), 
+              color="lat_group")
+alpha
+
+# Calculate averages and do t-test to compare
+# Extract Shannon and Simpson values
+shannon_values <- alpha$data$value[alpha$data$variable == "Shannon"]
+simpson_values <- alpha$data$value[alpha$data$variable == "Simpson"]
+
+# Extract lat_group values for grouping
+lat_group <- alpha$data$lat_group[alpha$data$variable == "Shannon"]  
+# or "Simpson", it's the same
+
+# Calculate the average for each lat_group
+average_shannon <- aggregate(shannon_values ~ lat_group, FUN = mean)
+average_simpson <- aggregate(simpson_values ~ lat_group, FUN = mean)
+
+# Print the results
+average_shannon
+average_simpson
+
+# Run t-test for Simpson
+anova_result <- aov(simpson_values ~ lat_group)
+summary(anova_result)
+```
+
+Beta diversity
+```{r phyloseq NMDS}
+# Plot beta diversity in NMDS
+
+# Generate the ordinations using the Bray-Curtis distance metric
+ord.nmds.bray <- ordinate(ps.prop.pruned.v2, "NMDS", "bray")
+
+# Plot!
+
+p1 <- plot_ordination(ps.prop.pruned.v2, 
+                      ord.nmds.bray, 
+                      color="lat_group", 
+                      title="Bray NMDS")
+                      #label= 'sample.id')
+p1
+```
+
+```{r outliers}
+# To explore the phyloseq we can convert the object components to data frames
+asv <- data.frame(otu_table(ps.prop.pruned.v2))
+tax <- data.frame(tax_table(ps.prop.pruned.v2))
+sd <- data.frame(sample_data(ps.prop.pruned.v2))
+
+# Using the "ASV" data frame let's look at BAJA_125
+BAJA_125 <- subset(asv, ,"BAJA_125")
+max(BAJA_125$BAJA_125)
+
+# Almost all (94%) of the ASVs belong to the ASV with the hash "303ab366b448fc492f429b0b17e4edf1219c7707". What is the taxonomy of that ASV?
+
+tax_hash <- tax_ps %>% 
+  filter(row.names(tax_ps) %in%
+           "303ab366b448fc492f429b0b17e4edf1219c7707")
+
+# This ASV belongs to a mackerel! It does not appear to be contamination, just a sample unusually dominated by one species. We can leave it as a legitimate sample for other analyses.
+
+# Now for BAJA_28
+BAJA_28 <- subset(asv, ,"BAJA_28")
+max(BAJA_28$BAJA_28)
+
+# 56% of the ASVs belong to the ASV with the hash "0fd4f3e4ea2b9002259e5c78c407f3c8869a1073". What is the taxonomy of that ASV?
+
+tax_hash <- tax_ps %>% 
+  filter(row.names(tax_ps) %in%
+           "0fd4f3e4ea2b9002259e5c78c407f3c8869a1073")
+
+# This ASV belongs to a sea chub! It does not appear to be contamination, just a sample unusually dominated by one species. We can leave it as a legitimate sample for other analyses.
+```
+
+```{r PCoA}
+# Ordinate
+ord.pcoa.bray.pruned.v2 <- ordinate(ps.prop.pruned.v2,
+                                    method="PCoA",
+                                    distance="bray"
+)
+
+# Plot
+pcoa <- plot_ordination(ps.prop.pruned.v2,
+                        ord.pcoa.bray.pruned.v2,
+                        color="lat_group",
+                        #shape="lat_group",
+                        title="PCoA of Baja MiFish samples") +
+  theme_classic()
+pcoa
+```
+
+Standardizing data
+```{r standardize}
+# Hellinger transformation
+# vegan equivalent: decostand
+ps.hell <- transform_sample_counts(ps, function(x) sqrt(x / sum(x)))
+ps.hell.pruned <- subset_taxa(ps.hell, Family != "Bovidae")
+ps.hell.pruned <- subset_taxa(ps.hell.pruned, Family != "Hominidae")
+ps.hell.pruned <- subset_taxa(ps.hell.pruned, Family != "Suidae")
+ps.hell.pruned <- subset_taxa(ps.hell.pruned, Family != "Felidae")
+ps.hell.pruned.v2 <- prune_samples(sample_sums(ps.hell.pruned)>0, 
+                                   ps.hell.pruned)
+
+# Wisconsin Double standardization
+# This is not a built-in function for phyloseq, so we have to do it to the ASV table and then re-import it to a phyloseq object
+# First we need to filter out our contaminants from our original (unstandardized!) phyloseq table
+
+ps.pruned <- subset_taxa(ps, Family != "Bovidae")
+ps.pruned <- subset_taxa(ps.pruned, Family != "Hominidae")
+ps.pruned <- subset_taxa(ps.pruned, Family != "Suidae")
+ps.pruned <- subset_taxa(ps.pruned, Family != "Felidae")
+ps.pruned.v2 <- prune_samples(sample_sums(ps.pruned)>0, 
+                                   ps.pruned)
+asv <- data.frame(otu_table(ps.pruned.v2))
+
+asv.wisc <- decostand(asv, method = "total", MARGIN = 2)
+ASV = otu_table(asv.wisc, taxa_are_rows=TRUE)
+
+ps.wisc <- phyloseq(ASV, MET, TAX)
+sample_data(ps.wisc)$sample.id <- sample_data(ps.prop.pruned.v2)$sample.id
+
+
+# Now you can go back and use ps.hell or ps.wisc in place of ps.prop.pruned.v2 for the alpha & beta diversity plots!
+```
+
+```{r alpha diversity wisc}
+# Plot alpha diversity metrics
+alpha <- plot_richness(ps.wisc, 
+              x="lat_group", 
+              measures=c("Shannon", "Simpson"), 
+              color="lat_group")
+alpha
+
+# Calculate averages and do t-test to compare
+# Extract Shannon and Simpson values
+shannon_values <- alpha$data$value[alpha$data$variable == "Shannon"]
+simpson_values <- alpha$data$value[alpha$data$variable == "Simpson"]
+
+# Extract lat_group values for grouping
+lat_group <- alpha$data$lat_group[alpha$data$variable == "Shannon"]  
+# or "Simpson", it's the same
+
+# Calculate the average for each lat_group
+average_shannon <- aggregate(shannon_values ~ lat_group, FUN = mean)
+average_simpson <- aggregate(simpson_values ~ lat_group, FUN = mean)
+
+# Print the results
+average_shannon
+average_simpson
+
+# Run t-test for Simpson
+anova_result <- aov(simpson_values ~ lat_group)
+summary(anova_result)
+```
+
+```{r alpha diversity hell}
+# Plot alpha diversity metrics
+alpha <- plot_richness(ps.hell.pruned.v2, 
+              x="lat_group", 
+              measures=c("Shannon", "Simpson"), 
+              color="lat_group")
+alpha
+
+# Calculate averages and do t-test to compare
+# Extract Shannon and Simpson values
+shannon_values <- alpha$data$value[alpha$data$variable == "Shannon"]
+simpson_values <- alpha$data$value[alpha$data$variable == "Simpson"]
+
+# Extract lat_group values for grouping
+lat_group <- alpha$data$lat_group[alpha$data$variable == "Shannon"]  
+# or "Simpson", it's the same
+
+# Calculate the average for each lat_group
+average_shannon <- aggregate(shannon_values ~ lat_group, FUN = mean)
+average_simpson <- aggregate(simpson_values ~ lat_group, FUN = mean)
+
+# Print the results
+average_shannon
+average_simpson
+
+# Run t-test for Simpson
+anova_result <- aov(simpson_values ~ lat_group)
+summary(anova_result)
+```
+
+```{r phyloseq NMDS wisc}
+# Plot beta diversity in NMDS
+
+# Generate the ordinations using the Bray-Curtis distance metric
+ord.nmds.bray <- ordinate(ps.wisc, "NMDS", "bray")
+
+# Plot!
+
+p1 <- plot_ordination(ps.wisc, 
+                      ord.nmds.bray, 
+                      color="lat_group", 
+                      title="Bray NMDS")
+                      #label="sample.id")
+p1
+
+```
+
+```{r phyloseq NMDS hell}
+# Plot beta diversity in NMDS
+
+# Generate the ordinations using the Bray-Curtis distance metric
+ord.nmds.bray <- ordinate(ps.hell.pruned.v2, "NMDS", "bray")
+
+# Plot!
+
+p1 <- plot_ordination(ps.hell, 
+                      ord.nmds.bray, 
+                      color="lat_group", 
+                      title="Bray NMDS",
+                      label="sample.id")
+p1
+```
+
+```{r PCoA wisc}
+# Ordinate
+ord.pcoa.bray.pruned.v2 <- ordinate(ps.wisc,
+                                    method="PCoA",
+                                    distance="bray"
+)
+
+# Plot
+pcoa <- plot_ordination(ps.wisc,
+                        ord.pcoa.bray.pruned.v2,
+                        color="lat_group",
+                        title="PCoA of Baja MiFish samples") +
+  theme_classic()
+pcoa
+```
+
+```{r PCoA hell}
+# Ordinate
+ord.pcoa.bray.pruned.v2 <- ordinate(ps.hell,
+                                    method="PCoA",
+                                    distance="bray"
+)
+
+# Plot
+pcoa <- plot_ordination(ps.hell,
+                        ord.pcoa.bray.pruned.v2,
+                        color="lat_group",
+                        title="PCoA of Baja MiFish samples") +
+  theme_classic()
+pcoa
+```
+
+Running statistics on beta diversity
+```{r permanova}
+# Extract the distance matrix (same one we used for the PCoA)
+dist <- phyloseq::distance(ps.prop.pruned.v2, "bray")
+
+ps.perm.data <- data.frame(sample_data(ps.prop.pruned.v2))
+
+# Test for the significance of season on sample distances
+permanova <- adonis2(dist ~ lat_group,
+                     ps.perm.data,
+                     permutations=999)
+permanova
+
+# We can also test multiple variables in a multifactorial PERMANOVA
+permanova.v2 <- adonis2(dist ~ lat_group * Most_Common_Habitat,
+                     ps.perm.data,
+                     permutations=999)
+permanova.v2
+```
+
+```{r permanova wisc}
+# Extract the distance matrix (same one we used for the PCoA)
+dist <- phyloseq::distance(ps.wisc, "bray")
+
+ps.perm.data <- data.frame(sample_data(ps.wisc))
+
+# Test for the significance of season on sample distances
+permanova <- adonis2(dist ~ lat_group,
+                     ps.perm.data,
+                     permutations=999)
+permanova
+
+# Multifactorial PERMANOVA
+permanova.v2 <- adonis2(dist ~ lat_group * Most_Common_Habitat,
+                     ps.perm.data,
+                     permutations=999)
+permanova.v2
+```
+
+```{r permanova hell}
+# Extract the distance matrix (same one we used for the PCoA)
+dist <- phyloseq::distance(ps.hell, "bray")
+
+ps.perm.data <- data.frame(sample_data(ps.hell))
+
+# Test for the significance of season on sample distances
+permanova <- adonis2(dist ~ lat_group,
+                     ps.perm.data,
+                     permutations=999)
+permanova
+
+# Multifactorial PERMANOVA
+permanova.v2 <- adonis2(dist ~ lat_group * Most_Common_Habitat,
+                     ps.perm.data,
+                     permutations=999)
+permanova.v2
+```
+
+Working on REEF data
+```{r REEF nmds}
+load(here("data", "reef_data_cleaning.RData"))
+# Take the data I need for NMDS
+# Filter data to retain rows with the highest Abundance within each group (bc there are duplicates for scientificname and Form due to separate entries for juveniles / adults of certain species)
+nmds_REEF_subset <- merged_reef_survey %>%
+  group_by(Form, scientificname) %>%
+  arrange(desc(Abundance)) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(Form, scientificname, Abundance)#, Habitat, Site_ID, lat, lon, lat_group)
+
+# Convert Form and Abundance to appropriate data types
+nmds_REEF_subset$Form <- as.numeric(nmds_REEF_subset$Form)
+nmds_REEF_subset$Abundance <- as.numeric(nmds_REEF_subset$Abundance)
+
+# Now make a dataframe where each row is a form, each column is a species, and numbers in
+# each cell are Abundance
+nmds_matrix_REEF <- pivot_wider(data = nmds_REEF_subset,
+                                names_from = scientificname,
+                                values_from = Abundance,
+                                values_fill = 0)  # replace NAs with 0s
+
+# Calculate the dissimilarity matrix
+diss_matrix_REEF <- vegdist(nmds_matrix_REEF, method = "gower")
+
+# Perform & plot NMDS
+nmds_result_REEF <- metaMDS(diss_matrix_REEF)
+plot_nmds_REEF <- plot(nmds_result_REEF)
+
+# Match merged_reef_survey metadata rows with nmds_matrix_REEF rows for Form
+merged_reef_survey <- merged_reef_survey[match(nmds_matrix_REEF$Form, merged_reef_survey$Form), ]
+
+# Add metadata to nmds plot
+nmds_coords <- nmds_result_REEF$points
+lat_group <- merged_reef_survey$lat_group
+plot(nmds_coords, type = "n", main = "NMDS Plot")
+points(nmds_coords, col = as.factor(lat_group))
+legend("topright", legend = unique(lat_group), col = 1:length(unique(lat_group)), pch = 1, title = "Lat Group")
+
+nmds_df <- data.frame(NMDS1 = nmds_coords[,1], NMDS2 = nmds_coords[,2], lat_group = as.factor(lat_group))
+
+# Plot with ggplot2
+ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = lat_group)) +
+  geom_point() +
+  labs(title = "NMDS Plot") +
+  scale_color_discrete(name = "Lat Group", labels = levels(nmds_df$lat_group)) +
+  theme_minimal()
+
+```
+
