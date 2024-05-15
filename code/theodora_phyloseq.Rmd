@@ -143,12 +143,13 @@ ps.prop.pruned <- subset_taxa(ps.prop.pruned,
 ps.prop.pruned.v2 <- prune_samples(sample_sums(ps.prop.pruned)>0, 
                                    ps.prop.pruned)
 
-top20 <- names(sort(taxa_sums(ps.prop.pruned.v2),
-                    decreasing=TRUE))[1:20]
+# Top 35 because that's how many hashes are needed to get to top 20 families
+top35 <- names(sort(taxa_sums(ps.prop.pruned.v2),
+                    decreasing=TRUE))[1:35]
 
-ps.top20 <- prune_taxa(top20, ps.prop.pruned.v2)
+ps.top35 <- prune_taxa(top35, ps.prop.pruned.v2)
 
-bar2 <- plot_bar(ps.top20, x="Site_ID", fill="Family") +
+bar2 <- plot_bar(ps.top35, x="Site_ID", fill="Family") +
   facet_wrap(~lat_group, scales="free_x")
 
 bar2
@@ -414,8 +415,8 @@ Running statistics on beta diversity
 ```{r permanova}
 # Extract the distance matrix (same one we used for the PCoA)
 dist <- phyloseq::distance(ps.prop.pruned.v2, "bray")
-
 ps.perm.data <- data.frame(sample_data(ps.prop.pruned.v2))
+lat_group <- ps.perm.data$lat_group
 
 # Test for the significance of season on sample distances
 permanova <- adonis2(dist ~ lat_group,
@@ -433,8 +434,8 @@ permanova.v2
 ```{r permanova wisc}
 # Extract the distance matrix (same one we used for the PCoA)
 dist <- phyloseq::distance(ps.wisc, "bray")
-
 ps.perm.data <- data.frame(sample_data(ps.wisc))
+lat_group <- ps.perm.data$lat_group
 
 # Test for the significance of season on sample distances
 permanova <- adonis2(dist ~ lat_group,
@@ -452,8 +453,8 @@ permanova.v2
 ```{r permanova hell}
 # Extract the distance matrix (same one we used for the PCoA)
 dist <- phyloseq::distance(ps.hell, "bray")
-
 ps.perm.data <- data.frame(sample_data(ps.hell))
+lat_group <- ps.perm.data$lat_group
 
 # Test for the significance of season on sample distances
 permanova <- adonis2(dist ~ lat_group,
@@ -491,7 +492,7 @@ nmds_matrix_REEF <- pivot_wider(data = nmds_REEF_subset,
                                 values_from = Abundance,
                                 values_fill = 0)  # replace NAs with 0s
 
-# Calculate the dissimilarity matrix
+# Calculate the dissimilarity matrix using gower method
 diss_matrix_REEF <- vegdist(nmds_matrix_REEF, method = "gower")
 
 # Perform & plot NMDS
@@ -499,14 +500,14 @@ nmds_result_REEF <- metaMDS(diss_matrix_REEF)
 plot_nmds_REEF <- plot(nmds_result_REEF)
 
 # Match merged_reef_survey metadata rows with nmds_matrix_REEF rows for Form
-merged_reef_survey <- merged_reef_survey[match(nmds_matrix_REEF$Form, merged_reef_survey$Form), ]
+merged_reef_survey1 <- merged_reef_survey[match(nmds_matrix_REEF$Form, merged_reef_survey$Form), ]
 
 # Add metadata to nmds plot
 nmds_coords <- nmds_result_REEF$points
-lat_group <- merged_reef_survey$lat_group
-plot(nmds_coords, type = "n", main = "NMDS Plot")
-points(nmds_coords, col = as.factor(lat_group))
-legend("topright", legend = unique(lat_group), col = 1:length(unique(lat_group)), pch = 1, title = "Lat Group")
+lat_group <- merged_reef_survey1$lat_group
+# plot(nmds_coords, type = "n", main = "NMDS Plot")
+# points(nmds_coords, col = as.factor(lat_group))
+# legend("topright", legend = unique(lat_group), col = 1:length(unique(lat_group)), pch = 1, title = "Lat Group")
 
 nmds_df <- data.frame(NMDS1 = nmds_coords[,1], NMDS2 = nmds_coords[,2], lat_group = as.factor(lat_group))
 
@@ -516,6 +517,213 @@ ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = lat_group)) +
   labs(title = "NMDS Plot") +
   scale_color_discrete(name = "Lat Group", labels = levels(nmds_df$lat_group)) +
   theme_minimal()
+
+```
+
+```{r REEF permanova}
+# Extract the distance matrix (same one we used for the PCoA)
+dist <- vegan::vegdist(nmds_matrix_REEF, method = "gower")
+lat_group <- merged_reef_survey1$lat_group
+
+permanova <- adonis2(dist ~ lat_group, data = merged_reef_survey1, 
+                     permutations = 999)
+permanova
+
+# We can also test multiple variables in a multifactorial PERMANOVA
+permanova.v2 <- adonis2(dist ~ lat_group * Habitat,
+                     data = as.data.frame(merged_reef_survey1),
+                     permutations=999)
+permanova.v2
+```
+
+```{r REEF family barplots}
+# Filter the top 20 families
+# Count the number of sightings for each family
+family_counts <- merged_reef_survey %>%
+  count(family_scientific)
+
+# Select the top 20 families by number of sightings
+top20 <- family_counts %>%
+  arrange(desc(n)) %>%
+  slice(1:20)
+
+# Filter merged_reef_survey to include only the top 20 families
+merged_reef_top20 <- merged_reef_survey %>%
+  filter(family_scientific %in% top20$family_scientific)
+
+# Calculate the number of sightings (frequency) of each family_scientific within each site and lat_group
+family_counts <- merged_reef_top20 %>%
+  group_by(Site_ID, lat_group, family_scientific) %>%
+  summarise(sightings = n_distinct(Form)) %>%
+  ungroup()
+
+# Plot the barplot with facet_wrap and black outlines
+ggplot(family_counts, aes(x = Site_ID, y = sightings, fill = family_scientific)) +
+  geom_bar(stat = "identity", color = "black") +
+  facet_wrap(~ lat_group, scales = "free_x") +
+  labs(title = "Number of Sightings of Top 20 Families at Each Site",
+       x = "Site ID", y = "Number of Sightings") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.key = element_rect(color = "black")) +
+  scale_fill_discrete(name = "Family")
+
+```
+
+```{r Family overlap eDNA}
+# Define the list of families to keep
+families_to_keep <- c("Balistidae", "Gobiidae", "Haemulidae", "Kyphosidae", "Labridae", "Labrisomidae", "Pomacentridae", "Serranidae", "Tetraodontidae")
+
+# Filter out the specified families from ps.prop.pruned.v2
+ps.filtered <- subset_taxa(ps.prop.pruned.v2, Family %in% families_to_keep)
+
+top <- names(sort(taxa_sums(ps.filtered),
+                    decreasing=TRUE))
+
+ps.top <- prune_taxa(top, ps.filtered)
+
+bar2 <- plot_bar(ps.top, x="Site_ID", fill="Family") +
+  facet_wrap(~lat_group, scales="free_x")
+
+bar2
+```
+
+```{r Family overlap REEF}
+filtered_merged_reef_survey <- merged_reef_survey[merged_reef_survey$family_scientific %in% families_to_keep, ]
+
+# Calculate the number of sightings (frequency) of each family_scientific within each site and lat_group
+family_counts <- filtered_merged_reef_survey %>%
+  group_by(Site_ID, lat_group, family_scientific) %>%
+  summarise(sightings = n_distinct(Form)) %>%
+  ungroup()
+
+# Plot the barplot with facet_wrap and black outlines
+ggplot(family_counts, aes(x = Site_ID, y = sightings, fill = family_scientific)) +
+  geom_bar(stat = "identity", color = "black") +
+  facet_wrap(~ lat_group, scales = "free_x") +
+  labs(title = "Number of Sightings of Top 20 Families at Each Site",
+       x = "Site ID", y = "Number of Sightings") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.key = element_rect(color = "black")) +
+  scale_fill_discrete(name = "Family")
+```
+
+```{r Heatmaps}
+library(rnaturalearth)
+library(sf)
+library(ggplot2)
+
+load(here("data", "baja_data_cleaning.RData"))
+load(here("data", "reef_data_cleaning.RData"))
+
+# Make a frequency table for abundance of species sightings in REEF surveys 
+frequency_table <- table(merged_reef_survey$scientificname)
+species_frequency_df <- as.data.frame(frequency_table)
+species_frequency_df <- species_frequency_df[order(species_frequency_df$Freq), ]
+# List of unique REEF species
+REEF_species <- species_frequency_df$Var1
+# List of unique eDNA species
+eDNA_species <- finalcleaned_eDNA_df$Species
+common_species <- intersect(eDNA_species, REEF_species)
+length(common_species)
+
+# Step 1: Filter merged_reef_survey to include only the top 5 most frequently sighted species
+merged_reef_survey_filtered <- merged_reef_survey %>%
+  filter(scientificname %in% common_species)
+
+# Step 2: Create a presence/absence matrix
+presence_matrix <- merged_reef_survey_filtered %>%
+  distinct(Site_ID, scientificname) %>%
+  mutate(presence = 1) %>%
+  pivot_wider(names_from = scientificname, values_from = presence, values_fill = 0)
+
+# Step 3: Join latitude and longitude to the presence_matrix based on Site_ID
+presence_matrix <- left_join(presence_matrix, merged_reef_survey_filtered %>% distinct(Site_ID, lat, lon), by = "Site_ID")
+
+# Step 4: Reshape presence_matrix into long format for plotting
+presence_matrix_long <- presence_matrix %>%
+  pivot_longer(cols = -c(Site_ID, lat, lon), names_to = "Species", values_to = "Presence")
+
+# Step 5: Plot the heatmap
+# ggplot(presence_matrix_long, aes(x = lon, y = lat, fill = Presence)) +
+#   geom_tile(color = "white") +
+#   scale_fill_gradient(low = "white", high = "red", na.value = "white", name = "Presence") +
+#   labs(title = "Presence/Absence of Top 5 Species by Site",
+#        x = "Longitude", y = "Latitude") +
+#   theme_minimal() +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+# Get world map data
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+# Convert to sf object
+presence_sf <- st_as_sf(presence_matrix_long, coords = c("lon", "lat"), crs = 4326)  
+# Set CRS to WGS 84
+
+# Plot sites
+ggplot() +
+  geom_sf(data = world, fill = "lightblue") +  # Plot the Gulf of California
+  coord_sf(xlim = c(-115, -107), ylim = c(24.2, 29.6), expand = FALSE) +
+  geom_tile(data = presence_matrix_long, aes(x = lon, y = lat), color = 'black', size = 1) +  # Plot the heatmap
+  # scale_fill_manual(values = c("white", "red"), na.value = "white", name = "Presence") +
+  labs(title = "Presence/Absence of Top 5 Species by Site",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+# eDNA presence / absence
+# Add lat and lon to eDNA file
+finalcleaned_eDNA_df <- left_join(finalcleaned_eDNA_df, 
+                                  merged_reef_survey %>% select(Site_ID, lat, lon),
+                                  by = "Site_ID")
+
+# Step 1: Filter merged_reef_survey to include only the top 5 most frequently sighted species
+eDNA_filtered <- finalcleaned_eDNA_df %>%
+  filter(Species %in% common_species)
+
+# Step 2: Create a presence/absence matrix
+presence_matrix_eDNA <- eDNA_filtered %>%
+  distinct(Site_ID, Species) %>%
+  mutate(presence = 1) %>%
+  pivot_wider(names_from = Species, values_from = presence, values_fill = 0)
+
+# Step 3: Join latitude and longitude to the presence_matrix based on Site_ID
+presence_matrix_eDNA <- left_join(presence_matrix_eDNA, eDNA_filtered %>% distinct(Site_ID, lat, lon), by = "Site_ID")
+
+# Step 4: Reshape presence_matrix into long format for plotting
+presence_matrix_long_eDNA <- presence_matrix_eDNA %>%
+  pivot_longer(cols = -c(Site_ID, lat, lon), names_to = "Species", values_to = "Presence")
+
+# Convert to sf object
+presence_sf <- st_as_sf(presence_matrix_long_eDNA, coords = c("lon", "lat"), crs = 4326)  
+# Set CRS to WGS 84
+
+
+##### 
+library(tidyverse)
+
+# Calculate similarity metric
+similarity_metric <- presence_matrix_long %>%
+  inner_join(presence_matrix_long_eDNA, by = c("Site_ID", "Species")) %>%
+  group_by(Site_ID) %>%
+  summarise(similarity = sum(Presence.x == Presence.y) / n_distinct(Species)) %>%
+  ungroup()
+
+# Merge with latitude and longitude information
+similarity_data <- inner_join(similarity_metric, presence_matrix, by = "Site_ID") %>%
+  select(Site_ID, lat, lon, similarity)
+
+# Plot on map
+ggplot() +
+  geom_sf(data = world, fill = "lightblue") +  # Plot the Gulf of California
+  coord_sf(xlim = c(-115, -107), ylim = c(24.2, 29.6), expand = FALSE) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, color = similarity)) +
+  scale_color_gradient(low = "blue", high = "red", name = "Similarity") +
+  labs(title = "Similarity of Presence/Absence Data",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal()
+
 
 ```
 

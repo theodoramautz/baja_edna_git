@@ -13,6 +13,8 @@ library(tidyr)
 library(tidyverse)
 library(here)
 
+# First run the cleaning R scrips
+
 # Load the workspace from the .RData file
 load(here("data", "baja_data_cleaning.RData"))
 load(here("data", "reef_data_cleaning.RData"))
@@ -35,7 +37,7 @@ finalcleaned_eDNA_df <- left_join(finalcleaned_eDNA_df,
 # Join merged_reef_survey to include lat and lon
 finalcleaned_eDNA_df <- left_join(finalcleaned_eDNA_df, 
                                   merged_reef_survey %>% 
-                                    select(Site_ID, lat, lon) %>% 
+                                    select(Site_ID, lat, lon, lat_group) %>% 
                                     distinct(), 
                                   by = "Site_ID")
 
@@ -51,49 +53,49 @@ condensed_metadata <- edna_metadata_df %>%
 condensed_metadata <- condensed_metadata %>%
   select(Sample_name, sample, everything())
 
-# Convert lat and lon to decimal-degrees
-# Function to separate degrees and minute-decimals
-separate_degrees_minutes <- function(coord) {
-  # Split the coordinate into degrees and minute-decimals
-  split_coord <- strsplit(coord, " ")
-  # Extract degrees and minute-decimals
-  degrees <- as.numeric(sapply(split_coord, `[`, 1))
-  minutes_decimal <- as.numeric(sapply(split_coord, `[`, 2))
-  # Create a data frame with separated degrees and minute-decimals
-  return(data.frame(deg = degrees, min = minutes_decimal))
-}
-
-# Apply the function to separate degrees and minute-decimals for latitude and longitude
-condensed_metadata <- cbind(
-  condensed_metadata,
-  separate_degrees_minutes(condensed_metadata$lat),
-  separate_degrees_minutes(condensed_metadata$lon)
-)
-
-# Rename the new columns
-names(condensed_metadata)[(ncol(condensed_metadata)-3):ncol(condensed_metadata)] <- c("lat_deg", "lat_min", "lon_deg", "lon_min")
-
-# Convert to decimal-degrees
-condensed_metadata <- condensed_metadata %>%
-  dplyr::mutate(lat.decimal = lat_deg + lat_min/60,
-              lon.decimal = lon_deg - lon_min/60)
-
-# Remove original lat / lon columns
-condensed_metadata <- condensed_metadata[, -c(11:16)]
-
-# Rename those columns to "lat" and "lon"
-condensed_metadata <- condensed_metadata %>%
-  rename(lat = lat.decimal) %>%
-  rename(lon = lon.decimal)
-
-# Assign latitude groups
-condensed_metadata <- condensed_metadata %>%
-  mutate(lat_group = case_when(
-    lat >= 28 & lat <= 30 ~ "28-30",
-    lat >= 25.7 & lat <= 27.9 ~ "25.7-27.9",
-    lat >= 24 & lat <= 25.6 ~ "24-25.6",
-    TRUE ~ NA_character_  # For values outside of specified ranges
-  ))
+# # Convert lat and lon to decimal-degrees
+# # Function to separate degrees and minute-decimals
+# separate_degrees_minutes <- function(coord) {
+#   # Split the coordinate into degrees and minute-decimals
+#   split_coord <- strsplit(coord, " ")
+#   # Extract degrees and minute-decimals
+#   degrees <- as.numeric(sapply(split_coord, `[`, 1))
+#   minutes_decimal <- as.numeric(sapply(split_coord, `[`, 2))
+#   # Create a data frame with separated degrees and minute-decimals
+#   return(data.frame(deg = degrees, min = minutes_decimal))
+# }
+# 
+# # Apply the function to separate degrees and minute-decimals for latitude and longitude
+# condensed_metadata <- cbind(
+#   condensed_metadata,
+#   separate_degrees_minutes(condensed_metadata$lat),
+#   separate_degrees_minutes(condensed_metadata$lon)
+# )
+# 
+# # Rename the new columns
+# names(condensed_metadata)[(ncol(condensed_metadata)-3):ncol(condensed_metadata)] <- c("lat_deg", "lat_min", "lon_deg", "lon_min")
+# 
+# # Convert to decimal-degrees
+# condensed_metadata <- condensed_metadata %>%
+#   dplyr::mutate(lat.decimal = lat_deg + lat_min/60,
+#               lon.decimal = lon_deg - lon_min/60)
+# 
+# # Remove original lat / lon columns
+# condensed_metadata <- condensed_metadata[, -c(11:16)]
+# 
+# # Rename those columns to "lat" and "lon"
+# condensed_metadata <- condensed_metadata %>%
+#   rename(lat = lat.decimal) %>%
+#   rename(lon = lon.decimal)
+# 
+# # Assign latitude groups
+# condensed_metadata <- condensed_metadata %>%
+#   mutate(lat_group = case_when(
+#     lat >= 28 & lat <= 30 ~ "28-30",
+#     lat >= 25.7 & lat <= 27.9 ~ "25.7-27.9",
+#     lat >= 24 & lat <= 25.6 ~ "24-25.6",
+#     TRUE ~ NA_character_  # For values outside of specified ranges
+#   ))
 
 # Write as csv
 folder <- here("data")

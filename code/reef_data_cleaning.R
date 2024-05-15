@@ -88,6 +88,17 @@ merged_reef_survey <- merged_reef_survey %>%
     TRUE ~ NA_character_  # For values outside of specified ranges
   ))
 
+# Add Family name
+family <- read.table(here("data", "reef_data", "TEPfamily0823.txt"), 
+                     header = TRUE, sep = "\t")
+colnames(family)[1] <- "Family"
+colnames(family)[2] <- "family_scientific"
+family <- family[, 1:2]
+# Merge dataframes without sorting
+merged_reef_survey <- merge(merged_reef_survey, family, by = "Family", all.x = TRUE)
+# Move the first column to the end
+merged_reef_survey <- merged_reef_survey[, c(2:length(merged_reef_survey), 1)]
+
 # Write to .csv
 folder <- here("data")
 path3 <- here::here(folder, "merged_reef.csv")
