@@ -553,8 +553,8 @@ merged_reef_top20 <- merged_reef_survey %>%
 
 # Calculate the number of sightings (frequency) of each family_scientific within each site and lat_group
 family_counts <- merged_reef_top20 %>%
-  group_by(Site_ID, lat_group, family_scientific) %>%
-  summarise(sightings = n_distinct(Form)) %>%
+  group_by(Site_ID, family_scientific, lat_group) %>%
+  summarise(sightings = n()) %>%
   ungroup()
 
 # Plot the barplot with facet_wrap and black outlines
@@ -593,30 +593,100 @@ filtered_merged_reef_survey <- merged_reef_survey[merged_reef_survey$family_scie
 
 # Calculate the number of sightings (frequency) of each family_scientific within each site and lat_group
 family_counts <- filtered_merged_reef_survey %>%
-  group_by(Site_ID, lat_group, family_scientific) %>%
-  summarise(sightings = n_distinct(Form)) %>%
+  group_by(Site_ID, family_scientific, lat_group) %>%
+  summarise(sightings = n()) %>%
   ungroup()
 
 # Plot the barplot with facet_wrap and black outlines
 ggplot(family_counts, aes(x = Site_ID, y = sightings, fill = family_scientific)) +
   geom_bar(stat = "identity", color = "black") +
   facet_wrap(~ lat_group, scales = "free_x") +
-  labs(title = "Number of Sightings of Top 20 Families at Each Site",
+  labs(#title = "Number of Sightings of Top 20 Families at Each Site",
        x = "Site ID", y = "Number of Sightings") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        legend.key = element_rect(color = "black")) +
+  theme(axis.text.x = element_text(angle = 270, hjust = 1),
+        legend.key = element_rect(color = "black"),
+        strip.background = element_rect(fill = "lightgray", color = "black", size = 0.5),
+        strip.text = element_text(color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 1),
+        axis.ticks.x = element_line(color = "black", size = 0.5)) +
   scale_fill_discrete(name = "Family")
 ```
 
-```{r Heatmaps}
+```{r Maps}
 library(rnaturalearth)
 library(sf)
-library(ggplot2)
+library(ggrepel)
 
 load(here("data", "baja_data_cleaning.RData"))
 load(here("data", "reef_data_cleaning.RData"))
+baja_metadata <- read.csv(here("data", "baja_edna_metadata.csv"))
 
+# Get world map data
+world <- ne_countries(scale = "large", returnclass = "sf")
+
+# Plot sites
+ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") +
+  coord_sf(xlim = c(-115, -107), ylim = c(24.2, 29.6), expand = FALSE) +
+  geom_point(data = baja_metadata, aes(x = lon, y = lat), color = 'black', size = 1) +
+  labs(title = "Map of All Sights",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+ggsave("all_sites.png", path = here("data", "figures"))
+
+# Summarize data to get unique Site_IDs with latitudes and longitudes
+baja_metadata_unique <- baja_metadata %>%
+  distinct(Site_ID, lat, lon)
+
+# Southern lat_group (24-25.6)
+ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") +
+  coord_sf(xlim = c(-111, -109.5), ylim = c(24.2, 25.2), expand = FALSE) +
+  geom_tile(data = baja_metadata, aes(x = lon, y = lat), color = 'black', size = 1) +
+  geom_text_repel(data = baja_metadata_unique, aes(x = lon, y = lat, label = Site_ID),
+                  size = 3, segment.size = 0.2, force = 0.7) +
+  labs(title = "Map of Southern Sites",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+ggsave("south_sites.png", path = here("data", "figures"))
+
+
+# Middle lat_group (25.7-27.9)
+ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") + 
+  coord_sf(xlim = c(-112, -110.5), ylim = c(25.7, 26.7), expand = FALSE) +
+  geom_tile(data = baja_metadata, aes(x = lon, y = lat), color = 'black', size = 1) +
+  geom_text_repel(data = baja_metadata_unique, aes(x = lon, y = lat, label = Site_ID),
+                  size = 3, segment.size = 0.2, force = 0.3) +
+  labs(title = "Map of Middle Sites",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+ggsave("middle_sites.png", path = here("data", "figures"))
+
+# Northern lat_group (28-30)
+ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") +
+  coord_sf(xlim = c(-114, -112), ylim = c(28.3, 29.6), expand = FALSE) +
+ geom_tile(data = baja_metadata, aes(x = lon, y = lat), color = 'black', size = 1) +
+ geom_text_repel(data = baja_metadata_unique, aes(x = lon, y = lat, label = Site_ID),
+                  size = 3, segment.size = 0.2, force = 0.9) +
+ labs(title = "Map of Northern Sites",
+       x = "Longitude", y = "Latitude") +
+ theme_minimal() +
+ theme(plot.title = element_text(hjust = 0.5)) + 
+ theme(panel.background = element_rect(fill = "lightblue", color = NA))
+ggsave("north_sites.png", path = here("data", "figures"))
+```
+
+```{r Presence / Absence Heatmaps}
+# REEF
 # Make a frequency table for abundance of species sightings in REEF surveys 
 frequency_table <- table(merged_reef_survey$scientificname)
 species_frequency_df <- as.data.frame(frequency_table)
@@ -628,80 +698,45 @@ eDNA_species <- finalcleaned_eDNA_df$Species
 common_species <- intersect(eDNA_species, REEF_species)
 length(common_species)
 
-# Step 1: Filter merged_reef_survey to include only the top 5 most frequently sighted species
+# Filter merged_reef_survey to include only common species
 merged_reef_survey_filtered <- merged_reef_survey %>%
   filter(scientificname %in% common_species)
 
-# Step 2: Create a presence/absence matrix
+# Create a presence/absence matrix
 presence_matrix <- merged_reef_survey_filtered %>%
   distinct(Site_ID, scientificname) %>%
   mutate(presence = 1) %>%
   pivot_wider(names_from = scientificname, values_from = presence, values_fill = 0)
 
-# Step 3: Join latitude and longitude to the presence_matrix based on Site_ID
+# Join latitude and longitude to the presence_matrix based on Site_ID
 presence_matrix <- left_join(presence_matrix, merged_reef_survey_filtered %>% distinct(Site_ID, lat, lon), by = "Site_ID")
 
-# Step 4: Reshape presence_matrix into long format for plotting
+# Reshape presence_matrix into long format for plotting
 presence_matrix_long <- presence_matrix %>%
   pivot_longer(cols = -c(Site_ID, lat, lon), names_to = "Species", values_to = "Presence")
 
-# Step 5: Plot the heatmap
-# ggplot(presence_matrix_long, aes(x = lon, y = lat, fill = Presence)) +
-#   geom_tile(color = "white") +
-#   scale_fill_gradient(low = "white", high = "red", na.value = "white", name = "Presence") +
-#   labs(title = "Presence/Absence of Top 5 Species by Site",
-#        x = "Longitude", y = "Latitude") +
-#   theme_minimal() +
-#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
-
-# Get world map data
-world <- ne_countries(scale = "medium", returnclass = "sf")
-
-# Convert to sf object
-presence_sf <- st_as_sf(presence_matrix_long, coords = c("lon", "lat"), crs = 4326)  
-# Set CRS to WGS 84
-
-# Plot sites
-ggplot() +
-  geom_sf(data = world, fill = "lightblue") +  # Plot the Gulf of California
-  coord_sf(xlim = c(-115, -107), ylim = c(24.2, 29.6), expand = FALSE) +
-  geom_tile(data = presence_matrix_long, aes(x = lon, y = lat), color = 'black', size = 1) +  # Plot the heatmap
-  # scale_fill_manual(values = c("white", "red"), na.value = "white", name = "Presence") +
-  labs(title = "Presence/Absence of Top 5 Species by Site",
-       x = "Longitude", y = "Latitude") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
-
-# eDNA presence / absence
+# eDNA
 # Add lat and lon to eDNA file
 finalcleaned_eDNA_df <- left_join(finalcleaned_eDNA_df, 
                                   merged_reef_survey %>% select(Site_ID, lat, lon),
                                   by = "Site_ID")
 
-# Step 1: Filter merged_reef_survey to include only the top 5 most frequently sighted species
+# Filter merged_reef_survey to include only the top 5 most frequently sighted species
 eDNA_filtered <- finalcleaned_eDNA_df %>%
   filter(Species %in% common_species)
 
-# Step 2: Create a presence/absence matrix
+# Create a presence/absence matrix
 presence_matrix_eDNA <- eDNA_filtered %>%
   distinct(Site_ID, Species) %>%
   mutate(presence = 1) %>%
   pivot_wider(names_from = Species, values_from = presence, values_fill = 0)
 
-# Step 3: Join latitude and longitude to the presence_matrix based on Site_ID
+# Join latitude and longitude to the presence_matrix based on Site_ID
 presence_matrix_eDNA <- left_join(presence_matrix_eDNA, eDNA_filtered %>% distinct(Site_ID, lat, lon), by = "Site_ID")
 
-# Step 4: Reshape presence_matrix into long format for plotting
+# Reshape presence_matrix into long format for plotting
 presence_matrix_long_eDNA <- presence_matrix_eDNA %>%
   pivot_longer(cols = -c(Site_ID, lat, lon), names_to = "Species", values_to = "Presence")
-
-# Convert to sf object
-presence_sf <- st_as_sf(presence_matrix_long_eDNA, coords = c("lon", "lat"), crs = 4326)  
-# Set CRS to WGS 84
-
-
-##### 
-library(tidyverse)
 
 # Calculate similarity metric
 similarity_metric <- presence_matrix_long %>%
@@ -714,16 +749,142 @@ similarity_metric <- presence_matrix_long %>%
 similarity_data <- inner_join(similarity_metric, presence_matrix, by = "Site_ID") %>%
   select(Site_ID, lat, lon, similarity)
 
+# # Calculate similarity based on Site_ID so that it doesn't remove dissimilar rows
+# # i.e. Site 34 (which doesn't have eDNA data)
+# similarity_metric <- presence_matrix_long %>%
+#   full_join(presence_matrix_long_eDNA, by = c("Site_ID", "Species")) %>%
+#   group_by(Site_ID) %>%
+#   summarise(similarity = sum(Presence.x == Presence.y, na.rm = TRUE) / n_distinct(Species), .groups = "drop")
+# 
+# # Merge with latitude and longitude information
+# similarity_data <- inner_join(similarity_metric, presence_matrix, by = "Site_ID") %>%
+#   select(Site_ID, lat, lon, similarity)
+
 # Plot on map
 ggplot() +
-  geom_sf(data = world, fill = "lightblue") +  # Plot the Gulf of California
+  geom_sf(data = world, fill = "gray", color = "black") +  # Set ocean and land colors
   coord_sf(xlim = c(-115, -107), ylim = c(24.2, 29.6), expand = FALSE) +
   geom_point(data = similarity_data, aes(x = lon, y = lat, color = similarity)) +
-  scale_color_gradient(low = "blue", high = "red", name = "Similarity") +
+  scale_color_gradient(name = "Similarity", limits = c(0, 1), low = "blue", high = "red") +
   labs(title = "Similarity of Presence/Absence Data",
        x = "Longitude", y = "Latitude") +
-  theme_minimal()
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+
+# Southern lat_group (24-25.6)
+ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") +  # Set ocean and land colors
+  coord_sf(xlim = c(-111, -109.5), ylim = c(24.2, 25.2), expand = FALSE) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, color = similarity)) +
+  scale_color_gradient(name = "Similarity", limits = c(0, 1), low = "blue", high = "red") +
+  labs(title = "Similarity of Presence/Absence Data",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+
+# Middle lat_group (25.7-27.9)
+ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") +  # Set ocean and land colors
+  coord_sf(xlim = c(-112, -110.5), ylim = c(25.7, 26.7), expand = FALSE) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, color = similarity)) +
+  scale_color_gradient(name = "Similarity", limits = c(0, 1), low = "blue", high = "red") +
+  labs(title = "Similarity of Presence/Absence Data",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+
+# Northern lat_group (28-30)
+ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") +  # Set ocean and land colors
+  coord_sf(xlim = c(-114, -112), ylim = c(28.3, 29.6), expand = FALSE) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, color = similarity)) +
+  scale_color_gradient(name = "Similarity", limits = c(0, 1), low = "blue", high = "red") +
+  labs(title = "Similarity of Presence/Absence Data",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+```
+```{r Scatter Plot}
+library(broom)
+
+# Assuming similarity_data contains Site_ID, lat, lon, and similarity columns
+
+# Scatter plot of latitudes against similarity
+scatter_plot <- ggplot(similarity_data, aes(x = lat, y = similarity)) +
+  geom_point() +
+  labs(title = "Scatter Plot of Latitude vs Similarity",
+       x = "Latitude", y = "Similarity")
+
+# Linear regression
+linear_model <- lm(similarity ~ lat, data = similarity_data)
+
+# Extracting regression coefficients
+regression_coefficients <- tidy(linear_model)
+
+# Display scatter plot and regression line
+scatter_plot + 
+  geom_smooth(method = "lm", se = FALSE, color = "red") +
+  geom_text(data = data.frame(x = max(similarity_data$lat) - 0.5, 
+                              y = min(similarity_data$similarity) + 0.1),
+            aes(x, y, label = paste("p-value:", signif(summary(linear_model)$coefficients["lat", 4], digits = 3))),
+            color = "red", hjust = 1)
+
+```
 
 
+```{r Venn Diagrams}
+# From phyloseq objects
+tax_table_ps.prop.pruned.v2 <- tax_table(ps.prop.pruned.v2)
+species_column <- subset(tax_table_ps.prop.pruned.v2, select = "Species")
+species_column <- as.data.frame(species_column)
+unique_species <- unique(species_column, rownames = TRUE)
+rownames(unique_species) <- NULL
+
+# From my original code
+unique(finalcleaned_eDNA_df$Species)
+
+# Exclude terrestrial families
+excluded_families <- c("Bovidae", "Hominidae", "Suidae", "Felidae")
+pruned_eDNA <- finalcleaned_eDNA_df[!finalcleaned_eDNA_df$Family %in% excluded_families, ]
+unique_species_pruned_eDNA <- as.data.frame(unique(pruned_eDNA$Species))
+colnames(unique_species_pruned_eDNA) <- "Species"
+
+# Bring back REEF species & common species
+REEF_species <- as.data.frame(REEF_species)
+colnames(REEF_species) <- "Species"
+common_species <- as.data.frame(intersect(unique_species_pruned_eDNA, REEF_species))
+
+# Make Species Venn
+species_list <- list(
+  PEDS = unique_species_pruned_eDNA$Species,
+  RVS = as.character(REEF_species$Species)
+)
+
+venn_plot <- ggvenn(species_list, columns = c("PEDS", "RVS"), 
+                    stroke_size = 1, 
+                    set_name_color = "black",
+                    set_name_size = 7,
+                    text_color = "black",
+                    text_size = 5, fill_color = c("seagreen3", "plum"))  
+
+print(venn_plot)
+ggsave("venn_diagram.png", path = here("data", "figures"))
+
+
+# Make Families Venn
+families_list <- list(
+  PEDS = unique(pruned_eDNA$Family),
+  RVS = unique(merged_reef_survey$family_scientific)
+)
+
+venn_plot <- ggvenn(families_list, columns = c("PEDS", "RVS"), 
+                    stroke_size = 1, 
+                    set_name_color = "black",
+                    set_name_size = 7,
+                    text_color = "black",
+                    text_size = 5, fill_color = c("cyan4", "violetred"))  
+
+print(venn_plot)
+ggsave("venn_diagram_families.png", path = here("data", "figures"))
 ```
 
