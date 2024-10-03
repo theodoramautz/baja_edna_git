@@ -44,8 +44,9 @@ plotQualityProfile(fnFs[1:2])
 
 ```{r filter trim}
 # Place filtered files in subdirectory (does not need to exist beforehand, the command will create it)
-filtFs <- file.path(path, "dada2_filtered", paste0(sample.names, "_F_filt.fastq.gz"))
-filtRs <- file.path(path, "dada2_filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+# _v2 added to file subdirectory to create a new one for prior rerun
+filtFs <- file.path(path, "dada2_filtered_v2", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "dada2_filtered_v2", paste0(sample.names, "_R_filt.fastq.gz"))
 names(filtFs) <- sample.names
 names(filtRs) <- sample.names
 
@@ -59,6 +60,7 @@ out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs,
                      compress=TRUE, multithread=TRUE)
 head(out)
 ```
+
 ```{r filter empties}
 # Check for samples that are empty (fewer than 10 sequences) following all the processing
 out.df <- as.data.frame(out)
@@ -77,9 +79,17 @@ plotErrors(errF, nominalQ=TRUE)
 ```
 
 ```{r sample inference}
+# Original code
 # This sample inference step uses the error profiles you generated above
-dadaFs <- dada(filtFs.filt, err=errF, multithread=TRUE)
-dadaRs <- dada(filtRs.filt, err=errR, multithread=TRUE)
+#dadaFs <- dada(filtFs.filt, err=errF, multithread=TRUE)
+#dadaRs <- dada(filtRs.filt, err=errR, multithread=TRUE)
+
+# With priors
+priorsF <- c("CACCGCGGTTATACGAGAGACCCAAGTTGTTAGGCATCGGCGTAAAGGGTGGTTAAGGCAATACCCAAACTAAAGCCGAACATCTTCCAAGCCGTCATACGCACACGAAGACAAGAAGCCCGATAACGAAAGTGGCTCTAACCTGCCTGAACCCACGAAAGCTATGACA", "CACCGCGGTTATACGAGAGGTCCAAGTTGTTAGCCCTCGGCGTAAAGAGTGGTTAAAGTAAAAAACAAAACTGAGGTCGAACATCTTCAAGGCAGTTATACGCTCCCGAGGATATGAAGCACAATCACGAAAGTAGCCTCACCCTGCTTGAACCCACGAAAGCTAGGACA", "CACCGCGGTTATACGAGAGACCCAAGTTGATAGACCCCGGCGTAAAGAGTGGTTAAGATTTATTTATACTTAAAGCCGAACGCCCTCAAAGCAGTTATACGCACCCGAGGGTATGAAGCCCAATCGCGAAAGTGGCTTTATTACTCCTGACTCCACGAAAGCTAAGGAA")
+priorsR <- c("TGTCATAGCTTTCGTGGGTTCAGGCAGGTTAGAGCCACTTTCGTTATCGGGCTTCTTGTCTTCGTGTGCGTATGACGGCTTGGAAGATGTTCGGCTTTAGTTTGGGTATTGCCTTAACCACCCTTTACGCCGATGCCTAACAACTTGGGTCTCTCGTATAACCGCGGTG", "TGTCCTAGCTTTCGTGGGTTCAAGCAGGGTGAGGCTACTTTCGTGATTGTGCTTCATATCCTCGGGAGCGTATAACTGCCTTGAAGATGTTCGACCTCAGTTTTGTTTTTTACTTTAACCACTCTTTACGCCGAGGGCTAACAACTTGGACCTCTCGTATAACCGCGGTG", "TTCCTTAGCTTTCGTGGAGTCAGGAGTAATAAAGCCACTTTCGCGATTGGGCTTCATACCCTCGGGTGCGTATAACTGCTTTGAGGGCGTTCGGCTTTAAGTATAAATAAATCTTAACCACTCTTTACGCCGGGGTCTATCAACTTGGGTCTCTCGTATAACCGCGGTG")
+
+dadaFs <- dada(filtFs.filt, err=errF, multithread=TRUE, priors = priorsF)
+dadaRs <- dada(filtRs.filt, err=errR, multithread=TRUE, priors = priorsR)
 ```
 
 ```{r merge reads}
@@ -114,7 +124,6 @@ indexes.to.keep <- which((nchar(colnames(seqtab.nochim)) <= 185) & ((nchar(colna
 cleaned.seqtab.nochim <- seqtab.nochim[,indexes.to.keep]
 ```
 
-
 ```{r sanity check}
 # Make a table to show how many reads were retained at each step of the process
 
@@ -133,10 +142,10 @@ sample.names.filt <- rownames(track.df.filt)
 cleaned.seqtab.nochim.filt <- cleaned.seqtab.nochim[sample.names.filt,]
 ```
 
-```{r assign taxonomy}
+```{r original assign taxonomy}
 # Now we are ready to assign taxonomy to our ASVs. Change the database file name to include the path on your system.
 
-taxa <- assignTaxonomy(cleaned.seqtab.nochim.filt, "/Users/theodoramautz/Desktop/SIO/Research/baja_edna/baja_edna_git/data/baja_raw_sequences/12S_efc_derep_and_clean-MURI-v2.fasta", tryRC=TRUE, multithread=TRUE)
+taxa <- assignTaxonomy(cleaned.seqtab.nochim.filt, "/Users/theodoramautz/Desktop/SIO/Research/baja_edna/baja_edna_git/data/reference_databases/old_databases/12S_efc_derep_and_clean-MURI-v2.fasta", tryRC=TRUE, multithread=TRUE)
 
 # Removing sequence rownames for display only
 taxa.print <- taxa 
@@ -145,7 +154,57 @@ rownames(taxa.print) <- NULL
 head(taxa.print)
 ```
 
-```{r save files}
+```{r assign taxonomy after rerunning bioinformatics v4}
+# Now we are ready to assign taxonomy to our ASVs. Change the database file name to include the path on your system.
+
+taxa <- assignTaxonomy(cleaned.seqtab.nochim.filt, "/Users/theodoramautz/Desktop/SIO/Research/baja_edna/baja_edna_git/data/reference_databases/12S_efc_derep_and_clean-Baja-v3.fa", tryRC=TRUE, multithread=TRUE)
+
+# Removing sequence rownames for display only
+taxa.print <- taxa 
+rownames(taxa.print) <- NULL
+
+head(taxa.print)
+```
+
+```{r re-run taxonomy with new database v1 to v3}
+# For re-running taxonomy assignment with new database without re-running all steps before
+library(Biostrings)
+
+# Load the hash key (Hash to Sequence mapping)
+conv_table <- read_csv(here("data", "sequencing_data", "Baja_MiFish_hash_key.csv"))
+
+# Load the ASV sequences
+ASV_sequences <- readDNAStringSet(here("data", "sequencing_data", "Baja_MiFish_ASVs.fasta"))
+
+# Reconstruct the ASV table from the saved hash key
+seqtab.nochim.df <- tibble::as_tibble(
+  matrix(data = NA, 
+         nrow = length(ASV_sequences), 
+         ncol = length(conv_table$Sequence))
+)
+colnames(seqtab.nochim.df) <- conv_table$Sequence
+
+# Assign taxonomy
+taxa <- assignTaxonomy(ASV_sequences, 
+                       "/Users/theodoramautz/Desktop/SIO/Research/baja_edna/baja_edna_git/data/reference_databases/old_databases/12S_efc_derep_and_clean-Baja-v2.fasta", 
+                       tryRC=TRUE, 
+                       multithread=TRUE)
+
+# With original database
+#taxa <- assignTaxonomy(ASV_sequences, "/Users/theodoramautz/Desktop/SIO/Research/baja_edna/baja_edna_git/data/reference_databases/old_databases/12S_efc_derep_and_clean-MURI-v2.fasta", tryRC=TRUE, multithread=TRUE)
+
+# Display the first few rows of the taxonomy table
+taxa.print <- taxa 
+rownames(taxa.print) <- NULL
+
+head(taxa.print)
+
+# Save the taxa table (no read data) and read provenance table
+taxa.df <- as.data.frame(taxa)
+write.csv(taxa.df, "Baja_MiFish_taxa_table_newseqs_v3.csv", row.names=TRUE)
+```
+
+```{r save files original}
 # If you are satisfied with your results you can save the outputs
 
 # First save the taxa table (no read data) and read provenance table
@@ -187,6 +246,48 @@ current_asv <- merge(current_asv,conv_table, by="Sequence") %>%
 write_csv(current_asv, "Baja_MiFish_ASVs.csv") 
 ```
 
+```{r save files after rerunning bioinformatics v4}
+# If you are satisfied with your results you can save the outputs
+
+# First save the taxa table (no read data) and read provenance table
+taxa.df <- as.data.frame(taxa)
+write.csv(taxa.df, here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_taxa_table_newseqs_v4.csv"), row.names=TRUE)
+
+track.df <- as.data.frame(track)
+write.csv(track.df, here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_reads_track_v4.csv"), row.names=TRUE)
+
+# Create hash key and link each ASV to a unique hash
+seqtab.nochim.df <- as.data.frame(cleaned.seqtab.nochim.filt)
+conv_table <- tibble(Hash = "", Sequence = "")
+Hashes <- map_chr(colnames(seqtab.nochim.df), ~ digest(.x, algo = "sha1", serialize = F, skip = "auto"))
+conv_table <- tibble(Hash = Hashes, Sequence = colnames(seqtab.nochim.df))
+
+# Write hash key into a csv
+write_csv(conv_table, here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_hash_key_v4.csv"))
+
+# Write hash key into a fasta
+write.fasta(sequences = as.list(conv_table$Sequence), 
+            names = as.list(conv_table$Hash),
+            file.out = here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_ASVs_v4.fasta"))
+
+# Make the ASV table
+sample.df <- tibble::rownames_to_column(seqtab.nochim.df, "Sample_name")
+sample.df <- data.frame(append(sample.df, c(Label="MiFish"), after = 1))
+current_asv <- bind_cols(sample.df %>%
+                         dplyr::select(Sample_name, Label),
+                         seqtab.nochim.df)
+current_asv <- current_asv %>%
+  pivot_longer(cols = c(-Sample_name, -Label),
+               names_to = "Sequence",
+               values_to = "nReads") %>%
+  filter(nReads > 0)
+current_asv <- merge(current_asv, conv_table, by="Sequence") %>%
+  select(-Sequence) %>%
+  relocate(Hash, .after=Label)
+
+# Write asv table into a csv
+write_csv(current_asv, here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_ASVs_v4.csv"))
+```
 This completes the DADA2 part of the tutorial! Now we can use the resulting data (ASV counts and ASV taxonomy) to run some basic diversity analyses using a program called Phyloseq.
 
 ```{r phyloseq setup}
