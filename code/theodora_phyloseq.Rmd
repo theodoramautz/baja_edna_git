@@ -737,18 +737,17 @@ pcoa
 
 Running statistics on beta diversity
 ```{r permanova}
-# Extract the distance matrix (same one we used for the PCoA)
+# Extract the distance matrix
 dist <- phyloseq::distance(ps.prop.pruned.v2, "bray")
 ps.perm.data <- data.frame(sample_data(ps.prop.pruned.v2))
 lat_group <- ps.perm.data$lat_group
 
-# Test for the significance of season on sample distances
 permanova <- adonis2(dist ~ lat_group,
                      ps.perm.data,
                      permutations=999)
 permanova
 
-# We can also test multiple variables in a multifactorial PERMANOVA
+# Multifactorial PERMANOVA
 permanova.v2 <- adonis2(dist ~ lat_group * Most_Common_Habitat,
                      ps.perm.data,
                      permutations=999)
@@ -756,12 +755,11 @@ permanova.v2
 ```
 
 ```{r permanova wisc}
-# Extract the distance matrix (same one we used for the PCoA)
+# Extract the distance matrix
 dist <- phyloseq::distance(ps.wisc, "bray")
 ps.perm.data <- data.frame(sample_data(ps.wisc))
 lat_group <- ps.perm.data$lat_group
 
-# Test for the significance of season on sample distances
 permanova <- adonis2(dist ~ lat_group,
                      ps.perm.data,
                      permutations=999)
@@ -775,14 +773,13 @@ permanova.v2
 ```
 
 ```{r permanova hell}
-# Extract the distance matrix (same one we used for the PCoA)
+# Extract the distance matrix
 dist <- phyloseq::distance(ps.hell.pruned.v2, "bray")
 ps.perm.data <- data.frame(sample_data(ps.hell.pruned.v2))
 
 # Lat group
 lat_group <- ps.perm.data$lat_group
 
-# Test for the significance of season on sample distances
 permanova <- adonis2(dist ~ lat_group,
                      ps.perm.data,
                      permutations=999)
@@ -791,7 +788,6 @@ permanova
 # Habitat
 Habitat <- ps.perm.data$Most_Common_Habitat
 
-# Test for the significance of season on sample distances
 permanova <- adonis2(dist ~ Habitat,
                      ps.perm.data,
                      permutations=999)
@@ -800,7 +796,6 @@ permanova
 # Max Depth
 MaxDepth <- ps.perm.data$MaxDepth
 
-# Test for the significance of season on sample distances
 permanova <- adonis2(dist ~ MaxDepth,
                      ps.perm.data,
                      permutations=999)
@@ -809,7 +804,6 @@ permanova
 # Diver
 Diver <- ps.perm.data$Diver
 
-# Test for the significance of season on sample distances
 permanova <- adonis2(dist ~ Diver,
                      ps.perm.data,
                      permutations=999)
@@ -830,6 +824,18 @@ permanova.v2 <- adonis2(dist ~ Habitat * MaxDepth,
                      ps.perm.data,
                      permutations=999)
 permanova.v2
+
+# Full model main effects
+permanova.v3 <- adonis2(dist ~ lat_group + Habitat + MaxDepth + Diver,
+                     ps.perm.data,
+                     permutations=999)
+permanova.v3
+
+# Full model interactions
+permanova.v4 <- adonis2(dist ~ lat_group * Habitat * MaxDepth * Diver,
+                     ps.perm.data,
+                     permutations=999)
+permanova.v4
 ```
 
 Working on REEF data
@@ -1126,7 +1132,7 @@ ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = Diver)) +
 ```
 
 ```{r REEF permanova}
-# Extract the distance matrix (same one we used for the PCoA)
+# Extract the distance matrix
 dist <- vegan::vegdist(nmds_matrix_REEF, method = "gower")
 
 # Lat group
@@ -1172,6 +1178,18 @@ permanova.v2 <- adonis2(dist ~ Habitat * Depth,
                      data = as.data.frame(merged_reef_survey1),
                      permutations=999)
 permanova.v2
+
+# Full model main effects
+permanova.v3 <- adonis2(dist ~ lat_group + Habitat + Depth + Diver,
+                     data = as.data.frame(merged_reef_survey1),
+                     permutations=999)
+permanova.v3
+
+# Full model interaction effects
+permanova.v4<- adonis2(dist ~ lat_group * Habitat * Depth * Diver,
+                     data = as.data.frame(merged_reef_survey1),
+                     permutations=999)
+permanova.v4
 ```
 
 ```{r REEF family barplots}

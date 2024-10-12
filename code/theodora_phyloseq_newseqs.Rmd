@@ -771,18 +771,17 @@ pcoa
 
 Running statistics on beta diversity
 ```{r permanova}
-# Extract the distance matrix (same one we used for the PCoA)
+# Extract the distance matrix
 dist <- phyloseq::distance(ps.prop.pruned.v2, "bray")
 ps.perm.data <- data.frame(sample_data(ps.prop.pruned.v2))
 lat_group <- ps.perm.data$lat_group
 
-# Test for the significance of season on sample distances
 permanova <- adonis2(dist ~ lat_group,
                      ps.perm.data,
                      permutations=999)
 permanova
 
-# We can also test multiple variables in a multifactorial PERMANOVA
+# Multifactorial PERMANOVA
 permanova.v2 <- adonis2(dist ~ lat_group * Most_Common_Habitat,
                      ps.perm.data,
                      permutations=999)
@@ -790,12 +789,11 @@ permanova.v2
 ```
 
 ```{r permanova wisc}
-# Extract the distance matrix (same one we used for the PCoA)
+# Extract the distance matrix
 dist <- phyloseq::distance(ps.wisc, "bray")
 ps.perm.data <- data.frame(sample_data(ps.wisc))
 lat_group <- ps.perm.data$lat_group
 
-# Test for the significance of season on sample distances
 permanova <- adonis2(dist ~ lat_group,
                      ps.perm.data,
                      permutations=999)
@@ -809,14 +807,13 @@ permanova.v2
 ```
 
 ```{r permanova hell}
-# Extract the distance matrix (same one we used for the PCoA)
+# Extract the distance matrix
 dist <- phyloseq::distance(ps.hell.pruned.v2, "bray")
 ps.perm.data <- data.frame(sample_data(ps.hell.pruned.v2))
 
 # Lat group
 lat_group <- ps.perm.data$lat_group
 
-# Test for the significance of season on sample distances
 permanova <- adonis2(dist ~ lat_group,
                      ps.perm.data,
                      permutations=999)
@@ -825,7 +822,6 @@ permanova
 # Habitat
 Habitat <- ps.perm.data$Most_Common_Habitat
 
-# Test for the significance of season on sample distances
 permanova <- adonis2(dist ~ Habitat,
                      ps.perm.data,
                      permutations=999)
@@ -834,7 +830,6 @@ permanova
 # Max Depth
 MaxDepth <- ps.perm.data$MaxDepth
 
-# Test for the significance of season on sample distances
 permanova <- adonis2(dist ~ MaxDepth,
                      ps.perm.data,
                      permutations=999)
@@ -843,7 +838,6 @@ permanova
 # Diver
 Diver <- ps.perm.data$Diver
 
-# Test for the significance of season on sample distances
 permanova <- adonis2(dist ~ Diver,
                      ps.perm.data,
                      permutations=999)
@@ -864,6 +858,18 @@ permanova.v2 <- adonis2(dist ~ Habitat * MaxDepth,
                      ps.perm.data,
                      permutations=999)
 permanova.v2
+
+# Full model main effects
+permanova.v3 <- adonis2(dist ~ lat_group + Habitat + MaxDepth + Diver,
+                     ps.perm.data,
+                     permutations=999)
+permanova.v3
+
+# Full model interactions
+permanova.v4 <- adonis2(dist ~ lat_group * Habitat * MaxDepth * Diver,
+                     ps.perm.data,
+                     permutations=999)
+permanova.v4
 ```
 
 Working on REEF data
@@ -1160,7 +1166,7 @@ ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = Diver)) +
 ```
 
 ```{r REEF permanova}
-# Extract the distance matrix (same one we used for the PCoA)
+# Extract the distance matrix
 dist <- vegan::vegdist(nmds_matrix_REEF, method = "gower")
 
 # Lat group
@@ -1206,6 +1212,18 @@ permanova.v2 <- adonis2(dist ~ Habitat * Depth,
                      data = as.data.frame(merged_reef_survey1),
                      permutations=999)
 permanova.v2
+
+# Full model main effects
+permanova.v3 <- adonis2(dist ~ lat_group + Habitat + Depth + Diver,
+                     data = as.data.frame(merged_reef_survey1),
+                     permutations=999)
+permanova.v3
+
+# Full model interaction effects
+permanova.v4<- adonis2(dist ~ lat_group * Habitat * Depth * Diver,
+                     data = as.data.frame(merged_reef_survey1),
+                     permutations=999)
+permanova.v4
 ```
 
 ```{r REEF family barplots}
@@ -1671,13 +1689,13 @@ rownames(unique_species) <- NULL
 unique_prop_species <- as.data.frame(unique_species[!is.na(unique_species)])
 colnames(unique_prop_species) <- "Species"
 
-# From my original code
-unique(finalcleaned_eDNA_df$Species)
-excluded_families <- c("Bovidae", "Hominidae", "Suidae", "Felidae")
-pruned_eDNA <- finalcleaned_eDNA_df[!finalcleaned_eDNA_df$Family %in% excluded_families, ]
-unique_species_pruned_eDNA <- unique(pruned_eDNA$Species)
-unique_pruned_eDNA_species <- as.data.frame(unique_species_pruned_eDNA[!is.na(unique_species_pruned_eDNA)])
-colnames(unique_pruned_eDNA_species) <- "Species"
+# # From my original code
+# unique(finalcleaned_eDNA_df$Species)
+# excluded_families <- c("Bovidae", "Hominidae", "Suidae", "Felidae")
+# pruned_eDNA <- finalcleaned_eDNA_df[!finalcleaned_eDNA_df$Family %in% excluded_families, ]
+# unique_species_pruned_eDNA <- unique(pruned_eDNA$Species)
+# unique_pruned_eDNA_species <- as.data.frame(unique_species_pruned_eDNA[!is.na(unique_species_pruned_eDNA)])
+# colnames(unique_pruned_eDNA_species) <- "Species"
 
 # Bring back & filter REEF species
 REEF_species <- as.data.frame(REEF_species)
@@ -1686,11 +1704,11 @@ filtered_REEF_species <- REEF_species %>%
 colnames(filtered_REEF_species) <- "Species"
 
 # Common species
-common_species <- as.data.frame(intersect(unique_pruned_eDNA_species, filtered_REEF_species))
+common_species <- as.data.frame(intersect(unique_prop_species, filtered_REEF_species))
 
 # Make Species Venn
 species_list <- list(
-  PEDS = unique_pruned_eDNA_species$Species,
+  PEDS = unique_prop_species$Species,
   RVS = as.character(filtered_REEF_species$Species)
 )
 
@@ -1706,8 +1724,11 @@ print(venn_plot)
 
 
 # Make Families Venn
+prop_family <- subset(tax_table_ps.prop.pruned.v2, select = "Family")
+family_column <- as.data.frame(prop_family)
+
 families_list <- list(
-  PEDS = unique(pruned_eDNA$Family), # includes one NA but looks like Venn ignores it
+  PEDS = unique(family_column$Family), # includes one NA but looks like Venn ignores it
   RVS = unique(merged_reef_survey$family_scientific)
 )
 
