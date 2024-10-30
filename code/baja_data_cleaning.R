@@ -4,10 +4,10 @@ library(ggplot2)
 library(here)
 
 # Read the csv files into a data frame
-baja_asv_df <- read.csv(here("data", "sequencing_data", "Baja_MiFish_ASVs.csv"))
-baja_taxonomy_df <- read.csv(here("data", "sequencing_data", "Baja_MiFish_taxa_table.csv"))
-baja_hash_df <- read.csv(here("data", "sequencing_data","Baja_MiFish_hash_key.csv"))
-baja_reads_df <- read.csv(here("data", "sequencing_data","Baja_MiFish_reads_track.csv"))
+baja_asv_df <- read.csv(here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_ASVs_v4.csv"))
+baja_taxonomy_df <- read.csv(here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_taxa_table_newseqs_v4.csv"))
+baja_hash_df <- read.csv(here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_hash_key_v4.csv"))
+baja_reads_df <- read.csv(here("data", "sequencing_data","rerun_bioinformatics_newseqs", "Baja_MiFish_reads_track_v4.csv"))
 
 ### PREPROCESSING ###
 
@@ -16,7 +16,7 @@ baja_reads_df <- read.csv(here("data", "sequencing_data","Baja_MiFish_reads_trac
 # Find and replace "El Lavadero (Las Animas) " to get rid of space at the end;
 # Rename other column titles to be just 1 word with underscores
 
-## Add BAJA_ to baja_asv_df
+# # Add BAJA_ to baja_asv_df
 # baja_asv_df$Sample_name <- paste0("BAJA_", baja_asv_df$Sample_name)
 # folder <- here("data", "sequencing_data")
 # path1 <- here::here(folder, "Baja_MiFish_ASVs.csv")

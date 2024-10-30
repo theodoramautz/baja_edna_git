@@ -19,19 +19,19 @@ theme_set(theme_bw())
 ```
 
 ```{r phyloseq preprocessing with original bioinformatics files}
-# Import output files from DADA2 (wide format asv). 
-asvs <- read.csv(here("data", "sequencing_data", "Baja_MiFish_ASVs_wide.csv"),row.names=1)
-# For added sequences
-tax <- read.csv(here("data", "sequencing_data", "Baja_MiFish_taxa_table_newseqs_v2.csv"))
-hash <- read.csv(here("data", "edna_data", "new_edna_data","BAJALIB-RCRUX-V2_MFU_hash_key.csv"))
-
-# Import the metadata file. Check to see if the order of your samples in the ASV table matches the order in the metadata table.
-metadata <- read.csv(here("data", "baja_edna_metadata.csv"), row.names=1)
-metadata <- metadata %>%
-  mutate(Diver = recode(Diver,
-                           "D4 (A)" = "D4",
-                           "D4 (A) " = "D4",
-                           "D4 (B)" = "D4"))
+# # Import output files from DADA2 (wide format asv). 
+# asvs <- read.csv(here("data", "sequencing_data", "Baja_MiFish_ASVs_wide.csv"),row.names=1)
+# # For added sequences
+# tax <- read.csv(here("data", "sequencing_data", "Baja_MiFish_taxa_table_newseqs_v2.csv"))
+# hash <- read.csv(here("data", "edna_data", "new_edna_data","BAJALIB-RCRUX-V2_MFU_hash_key.csv"))
+# 
+# # Import the metadata file. Check to see if the order of your samples in the ASV table matches the order in the metadata table.
+# metadata <- read.csv(here("data", "baja_edna_metadata.csv"), row.names=1)
+# metadata <- metadata %>%
+#   mutate(Diver = recode(Diver,
+#                            "D4 (A)" = "D4",
+#                            "D4 (A) " = "D4",
+#                            "D4 (B)" = "D4"))
 ```
 
 ```{r phyloseq preprocessing with rerun bioinformatics v4}
@@ -65,6 +65,32 @@ metadata <- metadata %>%
                            "D4 (A)" = "D4",
                            "D4 (A) " = "D4",
                            "D4 (B)" = "D4"))
+
+# Convert transport time to minutes
+convert_to_minutes <- function(time_str) {
+  time_str <- tolower(time_str)  # Convert to lowercase for uniformity
+  
+  # Initialize minutes and hours
+  minutes <- 0
+  hours <- 0
+  
+  # Extract hours if present
+  if (grepl("hour", time_str)) {
+    hours <- as.numeric(gsub("([0-9]+) hour.*", "\\1", time_str))
+  }
+  
+  # Extract minutes if present
+  if (grepl("min", time_str)) {
+    minutes <- as.numeric(gsub(".*?([0-9]+) min.*", "\\1", time_str))
+  }
+  
+  # Calculate total minutes
+  total_minutes <- hours * 60 + minutes
+  return(total_minutes)
+}
+
+# Apply the conversion to the transport_time column
+metadata$TransportTime <- sapply(metadata$TransportTime, convert_to_minutes)
 ```
 
 ```{r phyloseq format}
@@ -200,56 +226,97 @@ Alpha diversity
 # Plot alpha diversity metrics for lat_group
 alpha_lat <- plot_richness(ps.prop.pruned.v2, 
               x="lat_group", 
-              measures=c("Simpson", "Shannon"),  
+              measures=c("Simpson"),  
               color="lat_group") +
-       labs(x = "Latitude Group",         
-       color = "Latitude Group") +
+       labs(x = "Latitude Group", color = "Latitude Group") +
       scale_color_discrete(labels = c("South", "Middle", "North")) +
       scale_x_discrete(labels = c("South", "Middle", "North")) +
-      theme(axis.text.x = element_text(angle = 0))
+      theme(axis.text.x = element_text(angle = 0), plot.title = element_text(hjust = 0.5))
 alpha_lat
 
 # Plot alpha diversity metrics for habitat
 alpha_hab <- plot_richness(ps.prop.pruned.v2, 
               x="Most_Common_Habitat", 
-              measures=c("Simpson", "Shannon"),  
+              measures=c("Simpson"),
               color="Most_Common_Habitat") +
-              labs(x = "Habitat",         
-              color = "Habitat") +
-              theme(axis.text.x = element_text(angle = 0))
+              labs(x = "Habitat", color = "Habitat") +
+              theme(axis.text.x = element_text(angle = 0), plot.title = element_text(hjust = 0.5))
 alpha_hab
 
 # Plot alpha diversity metrics for max depth
 alpha_dep <- plot_richness(ps.prop.pruned.v2, 
               x="MaxDepth", 
-              measures=c("Simpson", "Shannon"),  
+              measures=c("Simpson"), 
               color="MaxDepth") +
-              labs(x = "Max Depth",
-              color = "Max Depth") 
+              labs(x = "Max Depth (feet)", color = "Max Depth") +
+              theme(plot.title = element_text(hjust = 0.5))
 alpha_dep
 
 # Plot alpha diversity metrics for diver
-alpha_div <- plot_richness(ps.prop.pruned.v2, 
+ps_subset <- subset_samples(ps.prop.pruned.v2, Diver %in% c("D1", "D2", "D3", "D4"))
+alpha_div <- plot_richness(ps_subset, 
               x="Diver", 
-              measures=c("Simpson", "Shannon"),  
-              color="Diver")
+              measures=c("Simpson"), 
+              color="Diver") +
+              theme(plot.title = element_text(hjust = 0.5))
 alpha_div
+
+# Plot alpha diversity metrics for bottom time
+alpha_time <- plot_richness(ps.prop.pruned.v2, 
+              x="BottomExposureTime_minutes", 
+              measures=c("Simpson"),  
+              color="BottomExposureTime_minutes") +
+       labs(x = "Bottom Time (mins)", color = "Bottom Time") +
+       theme(plot.title = element_text(hjust = 0.5))
+alpha_time
+
+# Plot alpha diversity metrics for transport time
+alpha_transp <- plot_richness(ps.prop.pruned.v2, 
+              x="TransportTime", 
+              measures=c("Simpson"),  
+              color="TransportTime") +
+       labs(x = "Transport Time (mins)", color = "Transport Time") +
+       theme(plot.title = element_text(hjust = 0.5))
+alpha_transp
+
+# Add consistent legend width and margin
+fixed_legend_width <- 1.2
+alpha_lat <- alpha_lat + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                               plot.margin = unit(c(1, 1, 1, 1), "lines"))
+alpha_hab <- alpha_hab + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                               plot.margin = unit(c(1, 1, 1, 1), "lines"))
+alpha_dep <- alpha_dep + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                               plot.margin = unit(c(1, 1, 1, 1), "lines"))
+alpha_div <- alpha_div + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                               plot.margin = unit(c(1, 1, 1, 1), "lines"))
+alpha_time <- alpha_time + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
+alpha_transp <- alpha_transp + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                                     plot.margin = unit(c(1, 1, 1, 1), "lines"))
+
+# Arrange plots in a grid
+library(cowplot)
+library(grid)
+
+plot_grid(alpha_lat, alpha_hab, alpha_dep, alpha_div, alpha_time, alpha_transp,
+          ncol = 2, align = "hv", axis = "tblr")
+#ggsave("alpha_peds.png", path = here("data", "figures", "new_figures"), width = 12, height = 8, units = "in", dpi = 600)
 
 # Calculate averages and do ANOVAs to compare
 # Latitude group
 # Extract Shannon and Simpson values
-shannon_values_lat <- alpha_lat$data$value[alpha_lat$data$variable == "Shannon"]
+#shannon_values_lat <- alpha_lat$data$value[alpha_lat$data$variable == "Shannon"]
 simpson_values_lat <- alpha_lat$data$value[alpha_lat$data$variable == "Simpson"]
 
 # Extract lat_group values for grouping
 lat_group <- alpha_lat$data$lat_group[alpha_lat$data$variable == "Simpson"]
 
 # Calculate the average for each lat_group
-average_shannon_lat <- aggregate(shannon_values_lat ~ lat_group, FUN = mean)
+#average_shannon_lat <- aggregate(shannon_values_lat ~ lat_group, FUN = mean)
 average_simpson_lat <- aggregate(simpson_values_lat ~ lat_group, FUN = mean)
 
 # Print the results
-average_shannon_lat
+#average_shannon_lat
 average_simpson_lat
 
 # Run ANOVA for Simpson
@@ -258,18 +325,18 @@ summary(anova_result_lat)
 
 # Habitat
 # Extract Shannon and Simpson values
-shannon_values_hab <- alpha_hab$data$value[alpha_hab$data$variable == "Shannon"]
+#shannon_values_hab <- alpha_hab$data$value[alpha_hab$data$variable == "Shannon"]
 simpson_values_hab <- alpha_hab$data$value[alpha_hab$data$variable == "Simpson"]
 
 # Extract habitat values for grouping
 habitat <- alpha_hab$data$Most_Common_Habitat[alpha_hab$data$variable == "Simpson"]
 
 # Calculate the average for each habitat
-average_shannon_hab <- aggregate(shannon_values_hab ~ habitat, FUN = mean)
+#average_shannon_hab <- aggregate(shannon_values_hab ~ habitat, FUN = mean)
 average_simpson_hab <- aggregate(simpson_values_hab ~ habitat, FUN = mean)
 
 # Print the results
-average_shannon_hab
+#average_shannon_hab
 average_simpson_hab
 
 # Run ANOVA for Simpson
@@ -278,18 +345,18 @@ summary(anova_result_hab)
 
 # Max Depth
 # Extract Shannon and Simpson values
-shannon_values_dep <- alpha_dep$data$value[alpha_dep$data$variable == "Shannon"]
+#shannon_values_dep <- alpha_dep$data$value[alpha_dep$data$variable == "Shannon"]
 simpson_values_dep <- alpha_dep$data$value[alpha_dep$data$variable == "Simpson"]
 
 # Extract depth values for grouping
 depth <- alpha_dep$data$MaxDepth[alpha_dep$data$variable == "Simpson"]
 
 # Calculate the average for each depth
-average_shannon_dep <- aggregate(shannon_values_dep ~ depth, FUN = mean)
+#average_shannon_dep <- aggregate(shannon_values_dep ~ depth, FUN = mean)
 average_simpson_dep <- aggregate(simpson_values_dep ~ depth, FUN = mean)
 
 # Print the results
-average_shannon_dep
+#average_shannon_dep
 average_simpson_dep
 
 # Run ANOVA for Simpson
@@ -298,23 +365,63 @@ summary(anova_result_dep)
 
 # Diver
 # Extract Shannon and Simpson values
-shannon_values_div <- alpha_div$data$value[alpha_div$data$variable == "Shannon"]
+#shannon_values_div <- alpha_div$data$value[alpha_div$data$variable == "Shannon"]
 simpson_values_div <- alpha_div$data$value[alpha_div$data$variable == "Simpson"]
 
 # Extract diver values for grouping
 diver <- alpha_div$data$Diver[alpha_div$data$variable == "Simpson"]
 
 # Calculate the average for each diver
-average_shannon_div <- aggregate(shannon_values_div ~ diver, FUN = mean)
+#average_shannon_div <- aggregate(shannon_values_div ~ diver, FUN = mean)
 average_simpson_div <- aggregate(simpson_values_div ~ diver, FUN = mean)
 
 # Print the results
-average_shannon_div
+#average_shannon_div
 average_simpson_div
 
 # Run ANOVA for Simpson
 anova_result_div <- aov(simpson_values_div ~ diver)
 summary(anova_result_div)
+
+# Bottom Time
+# Extract Shannon and Simpson values
+#shannon_values_time <- alpha_time$data$value[alpha_time$data$variable == "Shannon"]
+simpson_values_time <- alpha_time$data$value[alpha_time$data$variable == "Simpson"]
+
+# Extract diver values for grouping
+time <- alpha_time$data$BottomExposureTime_minutes[alpha_time$data$variable == "Simpson"]
+
+# Calculate the average for each diver
+#average_shannon_time <- aggregate(shannon_values_time ~ time, FUN = mean)
+average_simpson_time <- aggregate(simpson_values_time ~ time, FUN = mean)
+
+# Print the results
+#average_shannon_time
+average_simpson_time
+
+# Run ANOVA for Simpson
+anova_result_time <- aov(simpson_values_time ~ time)
+summary(anova_result_time)
+
+# Transport Time
+# Extract Shannon and Simpson values
+#shannon_values_transp <- alpha_transp$data$value[alpha_transp$data$variable == "Shannon"]
+simpson_values_transp <- alpha_transp$data$value[alpha_transp$data$variable == "Simpson"]
+
+# Extract diver values for grouping
+transp <- alpha_transp$data$TransportTime[alpha_transp$data$variable == "Simpson"]
+
+# Calculate the average for each diver
+#average_shannon_transp <- aggregate(shannon_values_transp ~ transp, FUN = mean)
+average_simpson_transp <- aggregate(simpson_values_transp ~ transp, FUN = mean)
+
+# Print the results
+#average_shannon_transp
+average_simpson_transp
+
+# Run ANOVA for Simpson
+anova_result_transp <- aov(simpson_values_transp ~ transp)
+summary(anova_result_transp)
 ```
 
 Beta diversity
@@ -552,7 +659,7 @@ summary(anova_result_div)
 # Plot alpha diversity metrics for lat_group
 alpha_lat <- plot_richness(ps.hell.pruned.v2, 
               x="lat_group", 
-              measures=c("Simpson", "Shannon"), 
+              measures=c("Simpson"), #, "Shannon"), 
               color="lat_group") +
        labs(x = "Latitude group",         
        color = "Latitude group") +
@@ -564,7 +671,7 @@ alpha_lat
 # Plot alpha diversity metrics for habitat
 alpha_hab <- plot_richness(ps.hell.pruned.v2, 
               x="Most_Common_Habitat", 
-              measures=c("Simpson", "Shannon"), 
+              measures=c("Simpson"), #, "Shannon"),
               color="Most_Common_Habitat") +
               labs(x = "Habitat",         
               color = "Habitat") +
@@ -574,32 +681,32 @@ alpha_hab
 # Plot alpha diversity metrics for max depth
 alpha_dep <- plot_richness(ps.hell.pruned.v2, 
               x="MaxDepth", 
-              measures=c("Simpson", "Shannon"), 
+              measures=c("Simpson"), #, "Shannon"), 
               color="MaxDepth")
 alpha_dep
 
 # Plot alpha diversity metrics for diver
 alpha_div <- plot_richness(ps.hell.pruned.v2, 
               x="Diver", 
-              measures=c("Simpson", "Shannon"), 
+              measures=c("Simpson"), #, "Shannon"),
               color="Diver")
 alpha_div
 
 # Calculate averages and do t-test to compare
 # Latitude group
 # Extract Shannon and Simpson values
-shannon_values_lat <- alpha_lat$data$value[alpha_lat$data$variable == "Shannon"]
+#shannon_values_lat <- alpha_lat$data$value[alpha_lat$data$variable == "Shannon"]
 simpson_values_lat <- alpha_lat$data$value[alpha_lat$data$variable == "Simpson"]
 
 # Extract lat_group values for grouping
 lat_group <- alpha_lat$data$lat_group[alpha_lat$data$variable == "Simpson"]
 
 # Calculate the average for each lat_group
-average_shannon_lat <- aggregate(shannon_values_lat ~ lat_group, FUN = mean)
+#average_shannon_lat <- aggregate(shannon_values_lat ~ lat_group, FUN = mean)
 average_simpson_lat <- aggregate(simpson_values_lat ~ lat_group, FUN = mean)
 
 # Print the results
-average_shannon_lat
+#average_shannon_lat
 average_simpson_lat
 
 # Run ANOVA for Simpson
@@ -608,18 +715,18 @@ summary(anova_result_lat)
 
 # Habitat
 # Extract Shannon and Simpson values
-shannon_values_hab <- alpha_hab$data$value[alpha_hab$data$variable == "Shannon"]
+#shannon_values_hab <- alpha_hab$data$value[alpha_hab$data$variable == "Shannon"]
 simpson_values_hab <- alpha_hab$data$value[alpha_hab$data$variable == "Simpson"]
 
 # Extract habitat values for grouping
 habitat <- alpha_hab$data$Most_Common_Habitat[alpha_hab$data$variable == "Simpson"]
 
 # Calculate the average for each habitat
-average_shannon_hab <- aggregate(shannon_values_hab ~ habitat, FUN = mean)
+#average_shannon_hab <- aggregate(shannon_values_hab ~ habitat, FUN = mean)
 average_simpson_hab <- aggregate(simpson_values_hab ~ habitat, FUN = mean)
 
 # Print the results
-average_shannon_hab
+#average_shannon_hab
 average_simpson_hab
 
 # Run ANOVA for Simpson
@@ -628,18 +735,18 @@ summary(anova_result_hab)
 
 # Max Depth
 # Extract Shannon and Simpson values
-shannon_values_dep <- alpha_dep$data$value[alpha_dep$data$variable == "Shannon"]
+#shannon_values_dep <- alpha_dep$data$value[alpha_dep$data$variable == "Shannon"]
 simpson_values_dep <- alpha_dep$data$value[alpha_dep$data$variable == "Simpson"]
 
 # Extract depth values for grouping
 depth <- alpha_dep$data$MaxDepth[alpha_dep$data$variable == "Simpson"]
 
 # Calculate the average for each depth
-average_shannon_dep <- aggregate(shannon_values_dep ~ depth, FUN = mean)
+#average_shannon_dep <- aggregate(shannon_values_dep ~ depth, FUN = mean)
 average_simpson_dep <- aggregate(simpson_values_dep ~ depth, FUN = mean)
 
 # Print the results
-average_shannon_dep
+#average_shannon_dep
 average_simpson_dep
 
 # Run ANOVA for Simpson
@@ -648,18 +755,18 @@ summary(anova_result_dep)
 
 # Diver
 # Extract Shannon and Simpson values
-shannon_values_div <- alpha_div$data$value[alpha_div$data$variable == "Shannon"]
+#shannon_values_div <- alpha_div$data$value[alpha_div$data$variable == "Shannon"]
 simpson_values_div <- alpha_div$data$value[alpha_div$data$variable == "Simpson"]
 
 # Extract diver values for grouping
 diver <- alpha_div$data$Diver[alpha_div$data$variable == "Simpson"]
 
 # Calculate the average for each diver
-average_shannon_div <- aggregate(shannon_values_div ~ diver, FUN = mean)
+#average_shannon_div <- aggregate(shannon_values_div ~ diver, FUN = mean)
 average_simpson_div <- aggregate(simpson_values_div ~ diver, FUN = mean)
 
 # Print the results
-average_shannon_div
+#average_shannon_div
 average_simpson_div
 
 # Run ANOVA for Simpson
@@ -695,7 +802,7 @@ ord.nmds.bray <- ordinate(ps.hell.pruned.v2, "NMDS", "bray")
 p1 <- plot_ordination(ps.hell.pruned.v2, 
                       ord.nmds.bray, 
                       color="lat_group", 
-                      title="PEDS NMDS Lat Group") +
+                      title="Lat Group") +
                       #label="sample.id") +
   scale_color_discrete(name = "Lat Group", labels = c("South", "Middle", "North")) +
   #theme_minimal() +
@@ -707,7 +814,7 @@ p1
 p2 <- plot_ordination(ps.hell.pruned.v2, 
                       ord.nmds.bray, 
                       color="Most_Common_Habitat", 
-                      title="PEDS NMDS Habitat") +
+                      title="Habitat") +
   #theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(color = "Habitat")
@@ -718,10 +825,10 @@ p2
 p3 <- plot_ordination(ps.hell.pruned.v2, 
                       ord.nmds.bray, 
                       color="MaxDepth", 
-                      title="PEDS NMDS Max Depth") +
+                      title="Max Depth") +
   #theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) +
-  labs(color = "MaxDepth")
+  labs(color = "Max Depth (feet)")
 p3
 #ggsave("beta_dep_peds.png", path = here("data", "figures"))
 
@@ -729,12 +836,58 @@ p3
 p4 <- plot_ordination(ps.hell.pruned.v2, 
                       ord.nmds.bray, 
                       color="Diver", 
-                      title="PEDS NMDS Diver") +
+                      title="Diver") +
   #theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(color = "Diver")
 p4
 #ggsave("beta_div_peds.png", path = here("data", "figures"))
+
+# Bottom Time
+p5 <- plot_ordination(ps.hell.pruned.v2, 
+                      ord.nmds.bray, 
+                      color="BottomExposureTime_minutes", 
+                      title="Bottom Time") +
+  #theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(color = "Bottom Time (mins)")
+p5
+#ggsave("beta_time_peds.png", path = here("data", "figures"))
+
+# Transport Time
+p6 <- plot_ordination(ps.hell.pruned.v2, 
+                      ord.nmds.bray, 
+                      color="TransportTime", 
+                      title="Transport Time") +
+  #theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(color = "Transport Time (mins)")
+p6
+#ggsave("beta_transp_peds.png", path = here("data", "figures"))
+
+#Plot all together on one graph
+# Define a fixed width for legends
+fixed_legend_width <- 1.2  # Adjust to desired width
+
+# Apply consistent legend width and margins for each plot
+p1 <- p1 + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
+p2 <- p2 + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
+p3 <- p3 + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
+p4 <- p4 + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
+p5 <- p5 + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
+p6 <- p6 + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
+
+# Arrange plots in a grid
+plot_grid(p1, p2, p3, p4, p5, p6, 
+          ncol = 2, align = "hv", axis = "tblr")  # Align horizontally and vertically
+#ggsave("beta_peds.png", path = here("data", "figures", "new_figures"), width = 12, height = 8, units = "in", dpi = 600)
+
 ```
 
 ```{r PCoA wisc}
@@ -843,6 +996,22 @@ permanova <- adonis2(dist ~ Diver,
                      permutations=999)
 permanova
 
+# Bottom Time
+Time <- ps.perm.data$BottomExposureTime_minutes
+
+permanova <- adonis2(dist ~ Time,
+                     ps.perm.data,
+                     permutations=999)
+permanova
+
+# Transport Time
+Transp <- ps.perm.data$TransportTime
+
+permanova <- adonis2(dist ~ Transp,
+                     ps.perm.data,
+                     permutations=999)
+permanova
+
 # Multifactorial PERMANOVAs
 permanova.v2 <- adonis2(dist ~ lat_group * Habitat,
                      ps.perm.data,
@@ -860,20 +1029,26 @@ permanova.v2 <- adonis2(dist ~ Habitat * MaxDepth,
 permanova.v2
 
 # Full model main effects
-permanova.v3 <- adonis2(dist ~ lat_group + Habitat + MaxDepth + Diver,
+permanova.v3 <- adonis2(dist ~ lat_group + Habitat + MaxDepth + Diver + Time + Transp,
                      ps.perm.data,
                      permutations=999)
 permanova.v3
 
-# Full model interactions
-permanova.v4 <- adonis2(dist ~ lat_group * Habitat * MaxDepth * Diver,
-                     ps.perm.data,
-                     permutations=999)
+# Full model interactions with relevant variables
+permanova.v4 <- adonis2(dist ~ lat_group * Habitat * MaxDepth * Transp,
+                      ps.perm.data,
+                      permutations=999)
 permanova.v4
+
+# # Full model interactions
+# permanova.v5 <- adonis2(dist ~ lat_group * Habitat * MaxDepth * Diver * Time * Transp,
+#                      ps.perm.data,
+#                      permutations=999)
+# permanova.v5
 ```
 
 Working on REEF data
-```{r REEF alpha diversity}
+```{r REEF data loading}
 load(here("data", "reef_data_cleaning.RData"))
 
 merged_reef_survey <- merged_reef_survey %>%
@@ -896,74 +1071,115 @@ merged_reef_survey <- merged_reef_survey %>%
 
 merged_reef_survey$MemberID <- factor(merged_reef_survey$MemberID, levels = paste0("D", 1:15))
 
-# Calculate Simpson's diversity index for each unique value in the "Form" column
-simpson_index <- merged_reef_survey %>%
-  group_by(Form) %>%
-  summarise(simpson_index = diversity(table(scientificname), index = "simpson"))
+# Fix categorical Max Depth info
+max_depth_lookup <- c(
+  "1" = 0,      # snorkel
+  "2" = 9,      # <10 feet
+  "3" = 19,     # 10-19 feet
+  "4" = 29,     # 20-29 feet
+  "5" = 39,     # 30-39 feet
+  "6" = 49,     # 40-49 feet
+  "7" = 59,     # 50-59 feet
+  "8" = 69,     # 60-69 feet
+  "9" = 79,     # 70-79 feet
+  "10" = 89,    # 80-89 feet
+  "11" = 99,    # 90-99 feet
+  "12" = 109,   # 100-109 feet
+  "13" = 119    # 110-119 feet
+)
 
-simpson_reef <- left_join(simpson_index, merged_reef_survey %>% 
-                          distinct(Form, MemberID, MaxDepth, Habitat, lat, lat_group), 
-                          by = "Form")
+merged_reef_survey$MaxDepth <- as.numeric(max_depth_lookup[as.character(merged_reef_survey$MaxDepth)])
 
-# Plot by latitude group
-# Define custom color palette for latitude groups
-lat_group_colors <- c("24-25.6" = "blue", "25.7-27.9" = "green", "28-30" = "red")
-
-# Create the jitter plot
-jitter_plot <- ggplot(simpson_reef, aes(x = lat_group, y = simpson_index, color = lat_group)) +
-  geom_jitter(width = 0.3, alpha = 0.7) +
-  scale_color_manual(values = lat_group_colors) + 
-  labs(x = "Latitude Group", y = "Simpson's Diversity Index", color = "Latitude Group") +   scale_x_discrete(labels = c("South", "Middle", "North")) +
-  scale_color_discrete(labels = c("South", "Middle", "North")) +
-  theme(axis.text.x = element_text(angle = 0))  
-jitter_plot
-#ggsave("alpha_lat_rvs.png", path = here("data", "figures"))
-
-# Plot by habitat
-jitter_plot <- ggplot(simpson_reef, aes(x = Habitat, y = simpson_index, color = Habitat)) +
-  geom_jitter(width = 0.3, alpha = 0.7) +
-  labs(x = "Habitat", y = "Simpson's Diversity Index", color = "Habitat") +  
-  theme(axis.text.x = element_text(angle = 0))  
-jitter_plot
-#ggsave("alpha_hab_rvs.png", path = here("data", "figures"))
-
-# Plot by MaxDepth
-jitter_plot <- ggplot(simpson_reef, aes(x = MaxDepth, y = simpson_index, color = MaxDepth)) +
-  geom_jitter(width = 0.3, alpha = 0.7) +
-  labs(x = "Max Depth", y = "Simpson's Diversity Index", color = "Max Depth") +  
-  theme(axis.text.x = element_text(angle = 0))  
-jitter_plot
-#ggsave("alpha_dep_rvs.png", path = here("data", "figures"))
-
-# Plot by Diver
-jitter_plot <- ggplot(simpson_reef, aes(x = MemberID, y = simpson_index, color = factor(MemberID))) +
-  geom_jitter(width = 0.3, alpha = 0.7) +
-  labs(x = "Diver", y = "Simpson's Diversity Index", color = "Diver") +  
-  theme(axis.text.x = element_text(angle = 0))
-jitter_plot
-#ggsave("alpha_div_rvs.png", path = here("data", "figures"))
-
-# Calculate means by latitude group
-average_simpson_lat_group <- simpson_reef %>%
-  group_by(lat_group) %>%
-  summarise(avg_simpson_index = mean(simpson_index, na.rm = TRUE))
-
-# Print the average Simpson's diversity index for each latitude group
-print(average_simpson_lat_group)
-
-# Running ANOVAs
-anova_result_lat <- aov(simpson_reef$simpson_index ~ simpson_reef$lat_group)
-summary(anova_result_lat)
-
-anova_result_hab <- aov(simpson_reef$simpson_index ~ simpson_reef$Habitat)
-summary(anova_result_hab)
-
-anova_result_dep <- aov(simpson_reef$simpson_index ~ simpson_reef$MaxDepth)
-summary(anova_result_dep)
-
-simpson_reef1 <- simpson_reef[!simpson_reef$MemberID == "D1",] # get rid of single diver
-anova_result_div <- aov(simpson_reef1$simpson_index ~ simpson_reef1$MemberID)
-summary(anova_result_div)
+# # Calculate Simpson's diversity index for each unique value in the "Form" column
+# simpson_index <- merged_reef_survey %>%
+#   group_by(Form) %>%
+#   summarise(simpson_index = diversity(table(scientificname), index = "simpson"))
+# 
+# simpson_reef <- left_join(simpson_index, merged_reef_survey %>%
+#                           distinct(Form, MemberID, MaxDepth, Habitat, lat, lat_group, BTime),
+#                           by = "Form")
+# 
+# # Define consistent legend width and margin
+# fixed_legend_width <- 1.2
+# 
+# # Plot by latitude group with specific colors
+# lat_group_colors <- c("24-25.6" = "blue", "25.7-27.9" = "green", "28-30" = "red")
+# jitter_lat <- ggplot(simpson_reef, aes(x = lat_group, y = simpson_index, color = lat_group)) +
+#   geom_jitter(width = 0.3, alpha = 0.7) +
+#    scale_color_manual(values = lat_group_colors) +
+#    labs(x = "Latitude Group", y = "Simpson's Diversity Index", color = "Latitude Group") +   scale_x_discrete(labels = c("South", "Middle", "North")) +
+#    scale_color_discrete(labels = c("South", "Middle", "North")) +
+#   theme(axis.text.x = element_text(angle = 0), plot.title = element_text(hjust = 0.5),
+#         legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+#         plot.margin = unit(c(1, 1, 1, 1), "lines")) +
+#   ggtitle("Latitude Group")
+# jitter_lat
+# 
+# # Plot by habitat
+# jitter_hab <- ggplot(simpson_reef, aes(x = Habitat, y = simpson_index, color = Habitat)) +
+#   geom_jitter(width = 0.3, alpha = 0.7) +
+#   labs(x = "Habitat", y = "Simpson's Diversity Index", color = "Habitat") +
+#   theme(axis.text.x = element_text(angle = 0), plot.title = element_text(hjust = 0.5),
+#         legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+#         plot.margin = unit(c(1, 1, 1, 1), "lines")) +
+#   ggtitle("Habitat")
+# jitter_hab
+# 
+# # Plot by MaxDepth
+# jitter_dep <- ggplot(simpson_reef, aes(x = MaxDepth, y = simpson_index, color = MaxDepth)) +
+#   geom_jitter(width = 0.3, alpha = 0.7) +
+#   labs(x = "Max Depth", y = "Simpson's Diversity Index", color = "Max Depth") +
+#   theme(axis.text.x = element_text(angle = 0), plot.title = element_text(hjust = 0.5),
+#         legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+#         plot.margin = unit(c(1, 1, 1, 1), "lines")) +
+#   ggtitle("Max Depth")
+# jitter_dep
+# 
+# # Plot by Diver
+# jitter_div <- ggplot(simpson_reef, aes(x = MemberID, y = simpson_index, color = factor(MemberID))) +
+#   geom_jitter(width = 0.3, alpha = 0.7) +
+#   labs(x = "Diver", y = "Simpson's Diversity Index", color = "Diver") +
+#   theme(axis.text.x = element_text(angle = 0), plot.title = element_text(hjust = 0.5),
+#         legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+#         plot.margin = unit(c(1, 1, 1, 1), "lines")) +
+#   ggtitle("Diver")
+# jitter_div
+# 
+# # Plot by Bottom Time
+# jitter_time <- ggplot(simpson_reef, aes(x = BTime, y = simpson_index, color = BTime)) +
+#   geom_jitter(width = 0.3, alpha = 0.7) +
+#   labs(x = "Bottom Time", y = "Simpson's Diversity Index", color = "Bottom Time (mins)") +
+#   theme(axis.text.x = element_text(angle = 0), plot.title = element_text(hjust = 0.5),
+#         legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+#         plot.margin = unit(c(1, 1, 1, 1), "lines")) +
+#   ggtitle("Bottom Time")
+# jitter_time
+# 
+# # Arrange all plots in a grid
+# plot_grid(jitter_lat, jitter_hab, jitter_dep, jitter_div, jitter_time,
+#           ncol = 2, align = "hv", axis = "tblr")
+# 
+# # Calculate means by latitude group
+# average_simpson_lat_group <- simpson_reef %>%
+#   group_by(lat_group) %>%
+#   summarise(avg_simpson_index = mean(simpson_index, na.rm = TRUE))
+# 
+# # Print the average Simpson's diversity index for each latitude group
+# print(average_simpson_lat_group)
+#
+# # Running ANOVAs
+# anova_result_lat <- aov(simpson_reef$simpson_index ~ simpson_reef$lat_group)
+# summary(anova_result_lat)
+#
+# anova_result_hab <- aov(simpson_reef$simpson_index ~ simpson_reef$Habitat)
+# summary(anova_result_hab)
+#
+# anova_result_dep <- aov(simpson_reef$simpson_index ~ simpson_reef$MaxDepth)
+# summary(anova_result_dep)
+#
+# simpson_reef1 <- simpson_reef[!simpson_reef$MemberID == "D1",] # get rid of single diver
+# anova_result_div <- aov(simpson_reef1$simpson_index ~ simpson_reef1$MemberID)
+# summary(anova_result_div)
 ```
 
 ```{r RVS alpha diversity with abundances}
@@ -996,7 +1212,7 @@ nmds_matrix_REEF <- pivot_wider(data = nmds_REEF_subset,
 # Separate the Form column
 form_column <- nmds_matrix_REEF$Form
 
-# Filter out the specified forms
+# Filter out the outliers (forms with 3 or fewer observations *and* are outliers for Simpson's scores)
 filtered_data <- nmds_matrix_REEF %>% 
   filter(!Form %in% c(5199313, 5199046, 5198449))
 
@@ -1015,49 +1231,65 @@ result <- data.frame(Form = form_column, Simpson_Index = simpson_index)
 
 # Merge with additional metadata
 simpson_reef <- left_join(result, merged_reef_survey %>% 
-                          distinct(Form, MemberID, MaxDepth, Habitat, lat, lat_group), 
+                          distinct(Form, MemberID, MaxDepth, Habitat, lat, lat_group, BTime), 
                           by = "Form")
 
-# Plot by latitude group
-# Define custom color palette for latitude groups
-lat_group_colors <- c("24-25.6" = "blue", "25.7-27.9" = "green", "28-30" = "red")
+# Define consistent legend width and margin
+fixed_legend_width <- 1.2
 
-# Create the jitter plot
-jitter_plot <- ggplot(simpson_reef, aes(x = lat_group, y = simpson_index, color = lat_group)) +
+# Plot by latitude group with specific colors
+lat_group_colors <- c("24-25.6" = "blue", "25.7-27.9" = "green", "28-30" = "red")
+jitter_lat <- ggplot(simpson_reef, aes(x = lat_group, y = simpson_index, color = lat_group)) +
   geom_jitter(width = 0.3, alpha = 0.7) +
-    #geom_text(aes(label = Form), vjust = -0.5, hjust = -0.5, size = 3, 
-              #check_overlap = TRUE) +
-  #geom_violin(trim = FALSE) +
-  scale_color_manual(values = lat_group_colors) + 
-  labs(x = "Latitude Group", y = "Simpson's Diversity Index", color = "Latitude Group") +   scale_x_discrete(labels = c("South", "Middle", "North")) +
-  scale_color_discrete(labels = c("South", "Middle", "North")) +
-  theme(axis.text.x = element_text(angle = 0))  
-jitter_plot
-#ggsave("alpha_lat_rvs_abund.png", path = here("data", "figures"))
+   scale_color_manual(values = lat_group_colors) + 
+   labs(x = "Latitude Group", y = "Simpson's Diversity Index", color = "Latitude Group") +   scale_x_discrete(labels = c("South", "Middle", "North")) +
+   scale_color_discrete(labels = c("South", "Middle", "North")) +
+  theme(axis.text.x = element_text(angle = 0), plot.title = element_text(hjust = 0.5),
+        legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+        plot.margin = unit(c(1, 1, 1, 1), "lines"))
+jitter_lat
 
 # Plot by habitat
-jitter_plot <- ggplot(simpson_reef, aes(x = Habitat, y = simpson_index, color = Habitat)) +
+jitter_hab <- ggplot(simpson_reef, aes(x = Habitat, y = simpson_index, color = Habitat)) +
   geom_jitter(width = 0.3, alpha = 0.7) +
-  labs(x = "Habitat", y = "Simpson's Diversity Index", color = "Habitat") +  
-  theme(axis.text.x = element_text(angle = 0))  
-jitter_plot
-#ggsave("alpha_hab_rvs_abund.png", path = here("data", "figures"))
+  labs(x = "Habitat", y = "Simpson's Diversity Index", color = "Habitat") +
+  theme(axis.text.x = element_text(angle = 0), plot.title = element_text(hjust = 0.5),
+        legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+        plot.margin = unit(c(1, 1, 1, 1), "lines"))
+jitter_hab
 
 # Plot by MaxDepth
-jitter_plot <- ggplot(simpson_reef, aes(x = MaxDepth, y = simpson_index, color = MaxDepth)) +
+jitter_dep <- ggplot(simpson_reef, aes(x = MaxDepth, y = simpson_index, color = MaxDepth)) +
   geom_jitter(width = 0.3, alpha = 0.7) +
-  labs(x = "Max Depth", y = "Simpson's Diversity Index", color = "Max Depth") +  
-  theme(axis.text.x = element_text(angle = 0))  
-jitter_plot
-#ggsave("alpha_dep_rvs_abund.png", path = here("data", "figures"))
+  labs(x = "Max Depth (feet)", y = "Simpson's Diversity Index", color = "Max Depth") +
+  theme(axis.text.x = element_text(angle = 0), plot.title = element_text(hjust = 0.5),
+        legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+        plot.margin = unit(c(1, 1, 1, 1), "lines"))
+jitter_dep
 
 # Plot by Diver
-jitter_plot <- ggplot(simpson_reef, aes(x = MemberID, y = simpson_index, color = factor(MemberID))) +
+jitter_div <- ggplot(simpson_reef, aes(x = MemberID, y = simpson_index, color = factor(MemberID))) +
   geom_jitter(width = 0.3, alpha = 0.7) +
-  labs(x = "Diver", y = "Simpson's Diversity Index", color = "Diver") +  
-  theme(axis.text.x = element_text(angle = 0))
-jitter_plot
-#ggsave("alpha_div_rvs_abund.png", path = here("data", "figures"))
+  labs(x = "Diver", y = "Simpson's Diversity Index", color = "Diver") +
+  theme(axis.text.x = element_text(angle = 0), plot.title = element_text(hjust = 0.5),
+        legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+        plot.margin = unit(c(1, 1, 1, 1), "lines"))
+jitter_div
+
+# Plot by Bottom Time
+jitter_time <- ggplot(simpson_reef, aes(x = BTime, y = simpson_index, color = BTime)) +
+  geom_jitter(width = 0.3, alpha = 0.7) +
+  labs(x = "Bottom Time (mins)", y = "Simpson's Diversity Index", color = "Bottom Time") +
+  theme(axis.text.x = element_text(angle = 0), plot.title = element_text(hjust = 0.5),
+        legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+        plot.margin = unit(c(1, 1, 1, 1), "lines"))
+jitter_time
+
+# Arrange all plots in a grid
+plot_grid(jitter_lat, jitter_hab, jitter_dep, jitter_div, jitter_time,
+          ncol = 2, align = "hv", axis = "tblr")
+#ggsave("alpha_rvs.png", path = here("data", "figures", "new_figures"), width = 12, height = 8, units = "in", dpi = 600)
+
 
 # Calculate means by latitude group
 average_simpson_lat_group <- simpson_reef %>%
@@ -1077,92 +1309,101 @@ summary(anova_result_hab)
 anova_result_dep <- aov(simpson_reef$Simpson_Index ~ simpson_reef$MaxDepth)
 summary(anova_result_dep)
 
-simpson_reef1 <- simpson_reef[!simpson_reef$MemberID == "D1",] # get rid of single diver
-anova_result_div <- aov(simpson_reef1$Simpson_Index ~ simpson_reef1$MemberID)
+#simpson_reef1 <- simpson_reef[!simpson_reef$MemberID == "D1",] # get rid of single diver
+anova_result_div <- aov(simpson_reef$Simpson_Index ~ simpson_reef$MemberID)
 summary(anova_result_div)
+
+anova_result_time <- aov(simpson_reef$Simpson_Index ~ simpson_reef$BTime)
+summary(anova_result_time)
 ```
 
 ```{r REEF nmds}
-# Take the data I need for NMDS
-# Filter data to retain rows with the highest Abundance within each group (bc there are duplicates for scientificname and Form due to separate entries for juveniles / adults of certain species)
+# Prepare the NMDS data
 nmds_REEF_subset <- merged_reef_survey %>%
   group_by(Form, scientificname) %>%
   arrange(desc(Abundance)) %>%
   slice(1) %>%
   ungroup() %>%
-  select(Form, scientificname, Abundance)#, Habitat, Site_ID, lat, lon, lat_group)
+  select(Form, scientificname, Abundance)
 
-# Convert Form and Abundance to appropriate data types
+# Convert columns to appropriate types
 nmds_REEF_subset$Form <- as.numeric(nmds_REEF_subset$Form)
 nmds_REEF_subset$Abundance <- as.numeric(nmds_REEF_subset$Abundance)
 
-# Now make a dataframe where each row is a form, each column is a species, and numbers in
-# each cell are Abundance
-nmds_matrix_REEF <- pivot_wider(data = nmds_REEF_subset,
+# Create matrix for NMDS
+nmds_matrix_REEF <- pivot_wider(nmds_REEF_subset,
                                 names_from = scientificname,
                                 values_from = Abundance,
-                                values_fill = 0)  # replace NAs with 0s
+                                values_fill = 0)
 
-# Calculate the dissimilarity matrix using gower method
+# Dissimilarity matrix and NMDS
 diss_matrix_REEF <- vegdist(nmds_matrix_REEF, method = "gower")
-
-# Perform & plot NMDS
 nmds_result_REEF <- metaMDS(diss_matrix_REEF)
-plot_nmds_REEF <- plot(nmds_result_REEF)
 
-# Match merged_reef_survey metadata rows with nmds_matrix_REEF rows for Form
+# Match metadata and prepare NMDS coordinates
 merged_reef_survey1 <- merged_reef_survey[match(nmds_matrix_REEF$Form, merged_reef_survey$Form), ]
-
-# Add metadata to nmds plot
 nmds_coords <- nmds_result_REEF$points
-lat_group <- merged_reef_survey1$lat_group
-# plot(nmds_coords, type = "n", main = "NMDS Plot")
-# points(nmds_coords, col = as.factor(lat_group))
-# legend("topright", legend = unique(lat_group), col = 1:length(unique(lat_group)), pch = 1, title = "Lat Group")
+nmds_df <- data.frame(NMDS1 = nmds_coords[,1], NMDS2 = nmds_coords[,2],
+                      lat_group = as.factor(merged_reef_survey1$lat_group),
+                      Habitat = merged_reef_survey1$Habitat,
+                      MaxDepth = merged_reef_survey1$MaxDepth,
+                      Diver = as.factor(merged_reef_survey1$MemberID),
+                      Time = merged_reef_survey1$BTime)
 
-nmds_df <- data.frame(NMDS1 = nmds_coords[,1], NMDS2 = nmds_coords[,2], lat_group = as.factor(lat_group))
+# Create individual plots with consistent themes and compact legends
 
-# Plot lat_group
-ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = lat_group)) +
+# Plot for Lat Group
+p1 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = lat_group)) +
   geom_point() +
-  labs(title = "RVS NMDS Lat Group") +
+  labs(title = "Lat Group") +
   scale_color_discrete(name = "Lat Group", labels = c("South", "Middle", "North")) +
- # theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5))
-#ggsave("beta_lat_rvs.png", path = here("data", "figures"))
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "right")
 
-# Plot Habitat
-Habitat <- merged_reef_survey1$Habitat
-
-nmds_df <- data.frame(NMDS1 = nmds_coords[,1], NMDS2 = nmds_coords[,2], Habitat = Habitat)
-ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = Habitat)) +
+# Plot for Habitat
+p2 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = Habitat)) +
   geom_point() +
-  labs(title = "RVS NMDS Habitat") +
- # theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5))
-#ggsave("beta_hab_rvs.png", path = here("data", "figures"))
+  labs(title = "Habitat") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "right")
 
-# Plot MaxDepth
-MaxDepth <- merged_reef_survey1$MaxDepth
-
-nmds_df <- data.frame(NMDS1 = nmds_coords[,1], NMDS2 = nmds_coords[,2], MaxDepth = MaxDepth)
-ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = MaxDepth)) +
+# Plot for MaxDepth
+p3 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = MaxDepth)) +
   geom_point() +
-  labs(title = "RVS NMDS Max Depth") +
- # theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5))
-#ggsave("beta_dep_rvs.png", path = here("data", "figures"))
+  labs(title = "Max Depth") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "right")
 
-# Plot Diver
-Diver <- merged_reef_survey1$MemberID
-
-nmds_df <- data.frame(NMDS1 = nmds_coords[,1], NMDS2 = nmds_coords[,2], Diver = Diver)
-ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = Diver)) +
+# Plot for Diver with compact legend
+p4 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = Diver)) +
   geom_point() +
-  labs(title = "RVS NMDS Diver") +
- # theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5))
-#ggsave("beta_div_rvs.png", path = here("data", "figures"))
+  labs(title = "Diver") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "right",
+        legend.key.size = unit(0.4, "cm"),
+        legend.text = element_text(size = 8),
+        legend.spacing.y = unit(0.1, "cm")) +
+  guides(color = guide_legend(ncol = 2))
+
+# Plot for Bottom Time
+p5 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = Time)) +
+  geom_point() +
+  labs(title = "Bottom Time") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "right")
+
+# Define the fixed legend width and apply consistent styling to all plots
+fixed_legend_width <- 1.2
+p_list <- list(p1, p2, p3, p4, p5)
+p_list <- lapply(p_list, function(p) {
+  p + theme(legend.key.width = unit(fixed_legend_width, "cm"),
+            plot.margin = unit(c(1, 1, 1, 1), "lines"))
+})
+
+# Arrange all plots in a grid
+plot_grid(plotlist = p_list, ncol = 2, align = "hv", axis = "tblr")
+#ggsave("beta_rvs.png", path = here("data", "figures", "new_figures"), width = 12, height = 8, units = "in", dpi = 600)
+
 ```
 
 ```{r REEF permanova}
@@ -1197,6 +1438,13 @@ permanova <- adonis2(dist ~ Diver, data = merged_reef_survey1,
                      permutations = 999)
 permanova
 
+# Bottom Time
+Time <- merged_reef_survey1$BTime
+
+permanova <- adonis2(dist ~ Time, data = merged_reef_survey1, 
+                     permutations = 999)
+permanova
+
 # Multifactorial PERMANOVA
 permanova.v2 <- adonis2(dist ~ lat_group * Habitat,
                      data = as.data.frame(merged_reef_survey1),
@@ -1214,13 +1462,13 @@ permanova.v2 <- adonis2(dist ~ Habitat * Depth,
 permanova.v2
 
 # Full model main effects
-permanova.v3 <- adonis2(dist ~ lat_group + Habitat + Depth + Diver,
+permanova.v3 <- adonis2(dist ~ lat_group + Habitat + Depth + Diver + Time,
                      data = as.data.frame(merged_reef_survey1),
                      permutations=999)
 permanova.v3
 
 # Full model interaction effects
-permanova.v4<- adonis2(dist ~ lat_group * Habitat * Depth * Diver,
+permanova.v4<- adonis2(dist ~ lat_group * Habitat * Depth * Diver * Time,
                      data = as.data.frame(merged_reef_survey1),
                      permutations=999)
 permanova.v4
@@ -1276,6 +1524,7 @@ bar2 <- plot_bar(ps.top, x="Site_ID", fill="Family") +
   facet_wrap(~lat_group, scales="free_x")
 
 bar2
+#ggsave("peds_family.png", path = here("data", "figures", "new_figures"))
 
 ```
 
@@ -1302,6 +1551,7 @@ ggplot(family_counts, aes(x = Site_ID, y = sightings, fill = family_scientific))
         panel.border = element_rect(color = "black", fill = NA, size = 1),
         axis.ticks.x = element_line(color = "black", size = 0.5)) +
   scale_fill_discrete(name = "Family")
+#ggsave("rvs_family.png", path = here("data", "figures", "new_figures"))
 ```
 
 ```{r Maps}
@@ -1431,7 +1681,7 @@ finalcleaned_eDNA_df <- left_join(finalcleaned_eDNA_df,
                                     select(Site_ID, lat, lon),
                                   by = "Site_ID")
 
-# Filter merged_reef_survey to include only the top 5 most frequently sighted species
+# Filter merged_reef_survey to include only the common species
 eDNA_filtered <- finalcleaned_eDNA_df %>%
   filter(Species %in% common_species)
 
@@ -1464,6 +1714,12 @@ similarity_metric <- presence_matrix_long %>%
   summarise(similarity = sum(agreement) / n()) %>%
   ungroup()
 
+# To also print number of species of overlap
+  # summarise(
+  #   similarity = sum(agreement) / n(),
+  #   similar_species_count = sum(agreement)  # Counts number of similar species
+  # ) %>%
+  # ungroup()
 
 # Merge with latitude and longitude information
 similarity_data <- inner_join(similarity_metric, presence_matrix, by = "Site_ID") %>%
@@ -1504,7 +1760,7 @@ ggplot() +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) + 
   theme(panel.background = element_rect(fill = "lightblue", color = NA))
-#ggsave("heatmap_all.png", path = here("data", "figures"))
+#ggsave("heatmap_all.png", path = here("data", "figures", "new_figures"))
 
 # Southern lat_group (24-25.6)
 ggplot() +
@@ -1517,7 +1773,7 @@ ggplot() +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) + 
   theme(panel.background = element_rect(fill = "lightblue", color = NA))
-#ggsave("heatmap_south.png", path = here("data", "figures"))
+#ggsave("heatmap_south.png", path = here("data", "figures", "new_figures"))
 
 # Middle lat_group (25.7-27.9)
 ggplot() +
@@ -1530,7 +1786,7 @@ ggplot() +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) + 
   theme(panel.background = element_rect(fill = "lightblue", color = NA))
-#ggsave("heatmap_middle.png", path = here("data", "figures"))
+#ggsave("heatmap_middle.png", path = here("data", "figures", "new_figures"))
 
 
 # Northern lat_group (28-30)
@@ -1544,7 +1800,7 @@ ggplot() +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) + 
   theme(panel.background = element_rect(fill = "lightblue", color = NA))
-#ggsave("heatmap_north.png", path = here("data", "figures"))
+#ggsave("heatmap_north.png", path = here("data", "figures", "new_figures"))
 ```
 
 ```{r Scatter Plot}
@@ -1576,7 +1832,7 @@ library(broom)
 scatter_plot <- ggplot(similarity_data, aes(x = lat, y = similarity)) +
   geom_point(color = "blue", alpha = 0.6) + 
   labs(title = "Scatter Plot of Latitude vs Species Overlap",
-       x = "Latitude", y = "Species Overlap") +
+       x = "Latitude", y = "Species Overlap (%)") +
   theme_minimal() + 
   theme(plot.title = element_text(hjust = 0.5), 
         axis.title = element_text(face = "bold"), 
@@ -1585,26 +1841,24 @@ scatter_plot <- ggplot(similarity_data, aes(x = lat, y = similarity)) +
 # Linear regression
 linear_model <- lm(similarity ~ lat, data = similarity_data)
 
-# Extracting regression coefficients
+# Extracting regression coefficients and p-value
 regression_coefficients <- tidy(linear_model)
 slope <- regression_coefficients$estimate[2]
+p_value <- regression_coefficients$p.value[2]
 
 # R-squared value
 r_squared <- summary(linear_model)$r.squared 
 
-# Display scatter plot and regression line
+# Display scatter plot and regression line with annotations
 scatter_plot + 
   geom_smooth(method = "lm", se = FALSE, color = "red") +
   geom_text(data = data.frame(x = max(similarity_data$lat) - 0.5, 
-                              y = min(similarity_data$similarity) + 0.1),
-            aes(x, y, label = paste("R-squared:", round(r_squared, digits = 3))),
-            color = "red", hjust = 1) +
-            geom_text(data = regression_coefficients,
-            aes(x = max(similarity_data$lat) - 0.5, 
-                y = min(similarity_data$similarity) + 0.05,
-                label = paste("p-value:", signif(p.value[2], digits = 3))),
-            color = "red", hjust = 1, vjust = -1) 
-ggsave("scatter_overlap.png", path = here("data", "figures"))
+                              y = min(similarity_data$similarity) + 0.15),
+            aes(x, y, label = paste("Slope:", round(slope, 3),
+                                    "\nR-squared:", round(r_squared, 3),
+                                    "\np-value:", signif(p_value, 3))),
+            color = "red", hjust = 1, vjust = 1) 
+#ggsave("scatter_overlap.png", path = here("data", "figures", "new_figures"), width = 10, height = 8, dpi = 300)
 
 # Scatter plots with alpha diversity scores
 # eDNA
@@ -1667,14 +1921,14 @@ r_squared <- summary(linear_model)$r.squared
 scatter_plot + 
   geom_smooth(method = "lm", se = FALSE, color = "red") +
   annotate("text", x = max(simpson_reef$lat) - 0.5, 
-           y = min(simpson_reef$simpson_index) + 0.1,
+           y = min(simpson_reef$Simpson_Index) + 0.1,
            label = paste("R-squared:", round(r_squared, digits = 3)),
            color = "red", hjust = 1) +
   annotate("text", x = max(simpson_reef$lat) - 0.5, 
-           y = min(simpson_reef$simpson_index) + 0.05,
+           y = min(simpson_reef$Simpson_Index) + 0.02,
            label = paste("p-value:", signif(regression_coefficients$p.value[2], digits = 3)),
            color = "red", hjust = 1, vjust = -3)
-#ggsave("scatter_alpha_rvs.png", path = here("data", "figures"))
+#ggsave("scatter_alpha_rvs.png", path = here("data", "figures", "new_figures"))
 ```
 
 ```{r Venn Diagrams}
@@ -1720,7 +1974,7 @@ venn_plot <- ggvenn(species_list, columns = c("PEDS", "RVS"),
                     text_size = 5, fill_color = c("seagreen3", "plum"))  
 
 print(venn_plot)
-#ggsave("venn_diagram.png", path = here("data", "figures"))
+#ggsave("venn_diagram.png", path = here("data", "figures", "new_figures"))
 
 
 # Make Families Venn
@@ -1728,18 +1982,4 @@ prop_family <- subset(tax_table_ps.prop.pruned.v2, select = "Family")
 family_column <- as.data.frame(prop_family)
 
 families_list <- list(
-  PEDS = unique(family_column$Family), # includes one NA but looks like Venn ignores it
-  RVS = unique(merged_reef_survey$family_scientific)
-)
-
-venn_plot <- ggvenn(families_list, columns = c("PEDS", "RVS"), 
-                    stroke_size = 1, 
-                    set_name_color = "black",
-                    set_name_size = 7,
-                    text_color = "black",
-                    text_size = 5, fill_color = c("cyan4", "violetred"))  
-
-print(venn_plot)
-#ggsave("venn_diagram_families.png", path = here("data", "figures"))
-```
-
+  PEDS = unique(family_c

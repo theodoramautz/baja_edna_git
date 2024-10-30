@@ -31,6 +31,32 @@ metadata <- metadata %>%
                            "D4 (A)" = "D4",
                            "D4 (A) " = "D4",
                            "D4 (B)" = "D4"))
+
+# Convert transport time to minutes
+convert_to_minutes <- function(time_str) {
+  time_str <- tolower(time_str)  # Convert to lowercase for uniformity
+  
+  # Initialize minutes and hours
+  minutes <- 0
+  hours <- 0
+  
+  # Extract hours if present
+  if (grepl("hour", time_str)) {
+    hours <- as.numeric(gsub("([0-9]+) hour.*", "\\1", time_str))
+  }
+  
+  # Extract minutes if present
+  if (grepl("min", time_str)) {
+    minutes <- as.numeric(gsub(".*?([0-9]+) min.*", "\\1", time_str))
+  }
+  
+  # Calculate total minutes
+  total_minutes <- hours * 60 + minutes
+  return(total_minutes)
+}
+
+# Apply the conversion to the transport_time column
+metadata$TransportTime <- sapply(metadata$TransportTime, convert_to_minutes)
 ```
 
 ```{r phyloseq format}
@@ -201,6 +227,24 @@ alpha_div <- plot_richness(ps.prop.pruned.v2,
               color="Diver")
 alpha_div
 
+# Plot alpha diversity metrics for bottom time
+alpha_time <- plot_richness(ps.prop.pruned.v2, 
+              x="BottomExposureTime_minutes", 
+              measures=c("Simpson", "Shannon"),  
+              color="BottomExposureTime_minutes") +
+       labs(x = "Bottom Time",         
+       color = "Bottom Time (mins)")
+alpha_time
+
+# Plot alpha diversity metrics for transport time
+alpha_transp <- plot_richness(ps.prop.pruned.v2, 
+              x="TransportTime", 
+              measures=c("Simpson", "Shannon"),  
+              color="TransportTime") +
+       labs(x = "Transport Time",         
+       color = "Transport Time")
+alpha_transp
+
 # Calculate averages and do ANOVAs to compare
 # Latitude group
 # Extract Shannon and Simpson values
@@ -281,6 +325,46 @@ average_simpson_div
 # Run ANOVA for Simpson
 anova_result_div <- aov(simpson_values_div ~ diver)
 summary(anova_result_div)
+
+# Bottom Time
+# Extract Shannon and Simpson values
+shannon_values_time <- alpha_time$data$value[alpha_time$data$variable == "Shannon"]
+simpson_values_time <- alpha_time$data$value[alpha_time$data$variable == "Simpson"]
+
+# Extract diver values for grouping
+time <- alpha_time$data$BottomExposureTime_minutes[alpha_time$data$variable == "Simpson"]
+
+# Calculate the average for each diver
+average_shannon_time <- aggregate(shannon_values_time ~ time, FUN = mean)
+average_simpson_time <- aggregate(simpson_values_time ~ time, FUN = mean)
+
+# Print the results
+average_shannon_time
+average_simpson_time
+
+# Run ANOVA for Simpson
+anova_result_time <- aov(simpson_values_time ~ time)
+summary(anova_result_time)
+
+# Transport Time
+# Extract Shannon and Simpson values
+shannon_values_transp <- alpha_transp$data$value[alpha_transp$data$variable == "Shannon"]
+simpson_values_transp <- alpha_transp$data$value[alpha_transp$data$variable == "Simpson"]
+
+# Extract diver values for grouping
+transp <- alpha_transp$data$TransportTime[alpha_transp$data$variable == "Simpson"]
+
+# Calculate the average for each diver
+average_shannon_transp <- aggregate(shannon_values_transp ~ transp, FUN = mean)
+average_simpson_transp <- aggregate(simpson_values_transp ~ transp, FUN = mean)
+
+# Print the results
+average_shannon_transp
+average_simpson_transp
+
+# Run ANOVA for Simpson
+anova_result_transp <- aov(simpson_values_transp ~ transp)
+summary(anova_result_transp)
 ```
 
 Beta diversity
@@ -701,6 +785,28 @@ p4 <- plot_ordination(ps.hell.pruned.v2,
   labs(color = "Diver")
 p4
 #ggsave("beta_div_peds.png", path = here("data", "figures"))
+
+# Bottom Time
+p5 <- plot_ordination(ps.hell.pruned.v2, 
+                      ord.nmds.bray, 
+                      color="BottomExposureTime_minutes", 
+                      title="PEDS NMDS Bottom Time") +
+  #theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(color = "Bottom Time")
+p5
+#ggsave("beta_time_peds.png", path = here("data", "figures"))
+
+# Transport Time
+p6 <- plot_ordination(ps.hell.pruned.v2, 
+                      ord.nmds.bray, 
+                      color="TransportTime", 
+                      title="PEDS NMDS Transport Time") +
+  #theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(color = "Transport Time")
+p6
+#ggsave("beta_transp_peds.png", path = here("data", "figures"))
 ```
 
 ```{r PCoA wisc}
@@ -809,6 +915,22 @@ permanova <- adonis2(dist ~ Diver,
                      permutations=999)
 permanova
 
+# Bottom Time
+Time <- ps.perm.data$BottomExposureTime_minutes
+
+permanova <- adonis2(dist ~ Time,
+                     ps.perm.data,
+                     permutations=999)
+permanova
+
+# Transport Time
+Transp <- ps.perm.data$TransportTime
+
+permanova <- adonis2(dist ~ Transp,
+                     ps.perm.data,
+                     permutations=999)
+permanova
+
 # Multifactorial PERMANOVAs
 permanova.v2 <- adonis2(dist ~ lat_group * Habitat,
                      ps.perm.data,
@@ -826,13 +948,13 @@ permanova.v2 <- adonis2(dist ~ Habitat * MaxDepth,
 permanova.v2
 
 # Full model main effects
-permanova.v3 <- adonis2(dist ~ lat_group + Habitat + MaxDepth + Diver,
+permanova.v3 <- adonis2(dist ~ lat_group + Habitat + MaxDepth + Diver + Time + Transp,
                      ps.perm.data,
                      permutations=999)
 permanova.v3
 
 # Full model interactions
-permanova.v4 <- adonis2(dist ~ lat_group * Habitat * MaxDepth * Diver,
+permanova.v4 <- adonis2(dist ~ lat_group * Habitat * MaxDepth * Diver * Time * Transp,
                      ps.perm.data,
                      permutations=999)
 permanova.v4
@@ -861,6 +983,25 @@ merged_reef_survey <- merged_reef_survey %>%
                            "74999" = "D15"))
 
 merged_reef_survey$MemberID <- factor(merged_reef_survey$MemberID, levels = paste0("D", 1:15))
+
+# Fix categorical Max Depth info
+max_depth_lookup <- c(
+  "1" = 0,      # snorkel
+  "2" = 9,      # <10 feet
+  "3" = 19,     # 10-19 feet
+  "4" = 29,     # 20-29 feet
+  "5" = 39,     # 30-39 feet
+  "6" = 49,     # 40-49 feet
+  "7" = 59,     # 50-59 feet
+  "8" = 69,     # 60-69 feet
+  "9" = 79,     # 70-79 feet
+  "10" = 89,    # 80-89 feet
+  "11" = 99,    # 90-99 feet
+  "12" = 109,   # 100-109 feet
+  "13" = 119    # 110-119 feet
+)
+
+merged_reef_survey$MaxDepth <- as.numeric(max_depth_lookup[as.character(merged_reef_survey$MaxDepth)])
 
 # Calculate Simpson's diversity index for each unique value in the "Form" column
 simpson_index <- merged_reef_survey %>%
