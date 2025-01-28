@@ -1841,8 +1841,7 @@ venn_plot <- ggvenn(families_list, columns = c("PEDS", "RVS"),
                     set_name_color = "black",
                     set_name_size = 7,
                     text_color = "black",
-                    text_size = 5, fill_color = c("cyan4", "violetred"))  
-
+                    text_size = 5, fill_color = c("seagreen3", "plum"))  
 print(venn_plot)
 #ggsave("venn_diagram_families.png", path = here("data", "figures"))
 ```

@@ -9,6 +9,12 @@ baja_taxonomy_df <- read.csv(here("data", "sequencing_data", "rerun_bioinformati
 baja_hash_df <- read.csv(here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_hash_key_v4.csv"))
 baja_reads_df <- read.csv(here("data", "sequencing_data","rerun_bioinformatics_newseqs", "Baja_MiFish_reads_track_v4.csv"))
 
+# # Original files
+# baja_asv_df <- read.csv(here("data", "sequencing_data", "Baja_MiFish_ASVs.csv"))
+# baja_taxonomy_df <- read.csv(here("data", "sequencing_data", "Baja_MiFish_taxa_table.csv"))
+# baja_hash_df <- read.csv(here("data", "sequencing_data","Baja_MiFish_hash_key.csv"))
+# baja_reads_df <- read.csv(here("data", "sequencing_data","Baja_MiFish_reads_track.csv"))
+
 ### PREPROCESSING ###
 
 # First manually rename some things in 'eDNA Explore Baja REEF 2022 - All Data.csv':

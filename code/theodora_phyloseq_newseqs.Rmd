@@ -12,9 +12,6 @@ library(tidyverse)
 library(here)
 library(dplyr)
 library(vegan)
-library(here)
-
-# Set plot theme to a simple black-and-white design
 theme_set(theme_bw())
 ```
 
@@ -270,35 +267,55 @@ alpha_time <- plot_richness(ps.prop.pruned.v2,
        theme(plot.title = element_text(hjust = 0.5))
 alpha_time
 
-# Plot alpha diversity metrics for transport time
-alpha_transp <- plot_richness(ps.prop.pruned.v2, 
-              x="TransportTime", 
-              measures=c("Simpson"),  
-              color="TransportTime") +
-       labs(x = "Transport Time (mins)", color = "Transport Time") +
-       theme(plot.title = element_text(hjust = 0.5))
-alpha_transp
+# # Plot alpha diversity metrics for transport time
+# alpha_transp <- plot_richness(ps.prop.pruned.v2, 
+#               x="TransportTime", 
+#               measures=c("Simpson"),  
+#               color="TransportTime") +
+#        labs(x = "Transport Time (mins)", color = "Transport Time") +
+#        theme(plot.title = element_text(hjust = 0.5))
+# alpha_transp
 
-# Add consistent legend width and margin
-fixed_legend_width <- 1.2
-alpha_lat <- alpha_lat + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
-                               plot.margin = unit(c(1, 1, 1, 1), "lines"))
-alpha_hab <- alpha_hab + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
-                               plot.margin = unit(c(1, 1, 1, 1), "lines"))
-alpha_dep <- alpha_dep + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
-                               plot.margin = unit(c(1, 1, 1, 1), "lines"))
-alpha_div <- alpha_div + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
-                               plot.margin = unit(c(1, 1, 1, 1), "lines"))
-alpha_time <- alpha_time + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
-                                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
-alpha_transp <- alpha_transp + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
-                                     plot.margin = unit(c(1, 1, 1, 1), "lines"))
+# Plot alpha diversity metrics for Site
+# Make new column in ps.prop.pruned.v2 to convert Site_ID to numeric
+ps.prop.pruned.v2@sam_data$Site_Number <- factor(
+  as.numeric(gsub("Site ", "", ps.prop.pruned.v2@sam_data$Site_ID)),
+  levels = sort(as.numeric(gsub("Site ", "", unique(ps.prop.pruned.v2@sam_data$Site_ID))))
+)
+alpha_site <- plot_richness(ps.prop.pruned.v2, 
+              x="Site_Number", 
+              measures=c("Simpson"),
+              color="Site_Number") +
+              labs(x = "Site", color = "Site") +
+              theme(axis.text.x = element_text(angle = 0), plot.title = element_text(hjust = 0.5))
+alpha_site
 
-# Arrange plots in a grid
 library(cowplot)
 library(grid)
 
-plot_grid(alpha_lat, alpha_hab, alpha_dep, alpha_div, alpha_time, alpha_transp,
+# Add consistent legend width and margin
+fixed_legend_width <- 1.2
+adjusted_margin <- unit(c(1, 2, 1, 1), "lines")  # Added extra space on the right
+
+alpha_lat <- alpha_lat + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                               plot.margin = adjusted_margin)
+alpha_hab <- alpha_hab + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                               plot.margin = adjusted_margin)
+alpha_dep <- alpha_dep + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                               plot.margin = adjusted_margin)
+alpha_div <- alpha_div + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                               plot.margin = adjusted_margin)
+alpha_time <- alpha_time + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                                 plot.margin = adjusted_margin)
+
+# Remove the legend for alpha_site and reduce x-axis labels
+alpha_site <- alpha_site +
+  scale_x_discrete(breaks = levels(ps.prop.pruned.v2@sam_data$Site_Number)[seq(1, nlevels(ps.prop.pruned.v2@sam_data$Site_Number), 5)]) +
+  theme(legend.position = "none",  # Remove legend
+        plot.margin = adjusted_margin)
+
+# Arrange plots in a grid
+plot_grid(alpha_lat, alpha_hab, alpha_dep, alpha_div, alpha_time, alpha_site,
           ncol = 2, align = "hv", axis = "tblr")
 #ggsave("alpha_peds.png", path = here("data", "figures", "new_figures"), width = 12, height = 8, units = "in", dpi = 600)
 
@@ -388,7 +405,7 @@ summary(anova_result_div)
 #shannon_values_time <- alpha_time$data$value[alpha_time$data$variable == "Shannon"]
 simpson_values_time <- alpha_time$data$value[alpha_time$data$variable == "Simpson"]
 
-# Extract diver values for grouping
+# Extract bottom time values for grouping
 time <- alpha_time$data$BottomExposureTime_minutes[alpha_time$data$variable == "Simpson"]
 
 # Calculate the average for each diver
@@ -403,25 +420,45 @@ average_simpson_time
 anova_result_time <- aov(simpson_values_time ~ time)
 summary(anova_result_time)
 
-# Transport Time
+# # Transport Time
+# # Extract Shannon and Simpson values
+# #shannon_values_transp <- alpha_transp$data$value[alpha_transp$data$variable == "Shannon"]
+# simpson_values_transp <- alpha_transp$data$value[alpha_transp$data$variable == "Simpson"]
+# 
+# # Extract diver values for grouping
+# transp <- alpha_transp$data$TransportTime[alpha_transp$data$variable == "Simpson"]
+# 
+# # Calculate the average for each diver
+# #average_shannon_transp <- aggregate(shannon_values_transp ~ transp, FUN = mean)
+# average_simpson_transp <- aggregate(simpson_values_transp ~ transp, FUN = mean)
+# 
+# # Print the results
+# #average_shannon_transp
+# average_simpson_transp
+
+# # Run ANOVA for Simpson
+# anova_result_transp <- aov(simpson_values_transp ~ transp)
+# summary(anova_result_transp)
+
+# Site
 # Extract Shannon and Simpson values
-#shannon_values_transp <- alpha_transp$data$value[alpha_transp$data$variable == "Shannon"]
-simpson_values_transp <- alpha_transp$data$value[alpha_transp$data$variable == "Simpson"]
+#shannon_values_site <- alpha_site$data$value[alpha_site$data$variable == "Shannon"]
+simpson_values_site <- alpha_site$data$value[alpha_site$data$variable == "Simpson"]
 
-# Extract diver values for grouping
-transp <- alpha_transp$data$TransportTime[alpha_transp$data$variable == "Simpson"]
+# Extract site values for grouping
+site <- alpha_site$data$Site_ID[alpha_site$data$variable == "Simpson"]
 
-# Calculate the average for each diver
-#average_shannon_transp <- aggregate(shannon_values_transp ~ transp, FUN = mean)
-average_simpson_transp <- aggregate(simpson_values_transp ~ transp, FUN = mean)
+# Calculate the average for each site
+#average_shannon_time <- aggregate(shannon_values_time ~ time, FUN = mean)
+average_simpson_site <- aggregate(simpson_values_site ~ site, FUN = mean)
 
 # Print the results
-#average_shannon_transp
-average_simpson_transp
+#average_shannon_time
+average_simpson_site
 
 # Run ANOVA for Simpson
-anova_result_transp <- aov(simpson_values_transp ~ transp)
-summary(anova_result_transp)
+anova_result_site <- aov(simpson_values_site ~ site)
+summary(anova_result_site)
 ```
 
 Beta diversity
@@ -854,14 +891,30 @@ p5 <- plot_ordination(ps.hell.pruned.v2,
 p5
 #ggsave("beta_time_peds.png", path = here("data", "figures"))
 
-# Transport Time
+# # Transport Time
+# p6 <- plot_ordination(ps.hell.pruned.v2, 
+#                       ord.nmds.bray, 
+#                       color="TransportTime", 
+#                       title="Transport Time") +
+#   #theme_minimal() +
+#   theme(plot.title = element_text(hjust = 0.5)) +
+#   labs(color = "Transport Time (mins)")
+# p6
+# #ggsave("beta_transp_peds.png", path = here("data", "figures"))
+
+# Site
+# Convert Site_ID to numbers
+ps.hell.pruned.v2@sam_data$Site_Number <- factor(
+  as.numeric(gsub("Site ", "", ps.hell.pruned.v2@sam_data$Site_ID)),
+  levels = sort(as.numeric(gsub("Site ", "", unique(ps.hell.pruned.v2@sam_data$Site_ID))))
+)
 p6 <- plot_ordination(ps.hell.pruned.v2, 
                       ord.nmds.bray, 
-                      color="TransportTime", 
-                      title="Transport Time") +
+                      color="Site_Number", 
+                      title="Site") +
   #theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) +
-  labs(color = "Transport Time (mins)")
+  labs(color = "Site_Number")
 p6
 #ggsave("beta_transp_peds.png", path = here("data", "figures"))
 
@@ -882,6 +935,12 @@ p5 <- p5 + theme(legend.position = "right", legend.key.width = unit(fixed_legend
                  plot.margin = unit(c(1, 1, 1, 1), "lines"))
 p6 <- p6 + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
                  plot.margin = unit(c(1, 1, 1, 1), "lines"))
+
+# Remove the legend for site (p6) and reduce x-axis labels
+p6 <- p6 +
+  scale_x_discrete(breaks = levels(ps.hell.pruned.v2@sam_data$Site_Number)[seq(1, nlevels(ps.hell.pruned.v2@sam_data$Site_Number), 5)]) +
+  theme(legend.position = "none",  # Remove legend
+        plot.margin = adjusted_margin)
 
 # Arrange plots in a grid
 plot_grid(p1, p2, p3, p4, p5, p6, 
@@ -1004,10 +1063,18 @@ permanova <- adonis2(dist ~ Time,
                      permutations=999)
 permanova
 
-# Transport Time
-Transp <- ps.perm.data$TransportTime
+# # Transport Time
+# Transp <- ps.perm.data$TransportTime
+# 
+# permanova <- adonis2(dist ~ Transp,
+#                      ps.perm.data,
+#                      permutations=999)
+# permanova
 
-permanova <- adonis2(dist ~ Transp,
+# Site
+Site <- ps.perm.data$Site_Number
+
+permanova <- adonis2(dist ~ Site,
                      ps.perm.data,
                      permutations=999)
 permanova
@@ -1028,14 +1095,24 @@ permanova.v2 <- adonis2(dist ~ Habitat * MaxDepth,
                      permutations=999)
 permanova.v2
 
+permanova.v2 <- adonis2(dist ~ lat_group * Site,
+                     ps.perm.data,
+                     permutations=999)
+permanova.v2
+
+permanova.v2 <- adonis2(dist ~ MaxDepth * Site,
+                     ps.perm.data,
+                     permutations=999)
+permanova.v2
+
 # Full model main effects
-permanova.v3 <- adonis2(dist ~ lat_group + Habitat + MaxDepth + Diver + Time + Transp,
+permanova.v3 <- adonis2(dist ~ lat_group + Habitat + MaxDepth + Diver + Time + Site,
                      ps.perm.data,
                      permutations=999)
 permanova.v3
 
 # Full model interactions with relevant variables
-permanova.v4 <- adonis2(dist ~ lat_group * Habitat * MaxDepth * Transp,
+permanova.v4 <- adonis2(dist ~ lat_group * Habitat * MaxDepth * Site,
                       ps.perm.data,
                       permutations=999)
 permanova.v4
@@ -1991,9 +2068,237 @@ venn_plot <- ggvenn(families_list, columns = c("PEDS", "RVS"),
                     set_name_color = "black",
                     set_name_size = 7,
                     text_color = "black",
-                    text_size = 5, fill_color = c("cyan4", "violetred"))  
+                    text_size = 5, fill_color = c("seagreen3", "plum"))  
 
 print(venn_plot)
 #ggsave("venn_diagram_families.png", path = here("data", "figures", "new_figures"))
 ```
+
+```{r}
+library(ggpmisc)
+library(metagMisc)
+library(ranacapa)
+library(patchwork)
+
+varnames <- colnames(asvs_long)
+to_remove <- c("Sample_name", "Label", "Hash", "nReads")
+
+#Metadata
+metadata %>%  as.data.frame() -> sampledata
+rownames(sampledata) <- sampledata$Sample
+sample_data(sampledata) -> sampledata
+
+#ASV Reads
+
+c(setdiff(varnames,to_remove),"Tot") -> varnames_to_group
+asvs_long <- psmelt(ps.prop.pruned.v2)
+wide_PA <- asvs_long %>%
+  group_by(Sample) %>%
+  mutate(Tot = sum(Abundance)) %>%
+  unite(sum.taxonomy, c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), sep = ";", remove = FALSE) %>%
+  group_by(Sample, sum.taxonomy) %>%
+  dplyr::summarise(nReads = sum(Abundance), Tot = first(Tot), .groups = 'drop') %>%
+  mutate(Prop.abund = nReads / Tot) %>%
+  group_by(sum.taxonomy) %>%
+  mutate(Colmax = max(Prop.abund),
+         eDNA.Index = Prop.abund / Colmax) %>%
+  dplyr::select(sum.taxonomy, Sample, eDNA.Index) %>%
+  mutate(eDNA.Index = replace_na(eDNA.Index, 0)) %>%
+  pivot_wider(names_from = Sample, values_from = eDNA.Index, values_fill = 0)
+
+wide_PA %>%
+  dplyr::select(sum.taxonomy) %>%
+   separate(sum.taxonomy, into=c("Kingdom",              "Phylum",               "Class"              
+,"Order",                "Family",               "Genus",               "Species"), sep=";", remove=F) %>%  
+  dplyr::select(sum.taxonomy, Kingdom,Phylum,Class, Order,Family, Genus, Species) %>%
+  distinct() %>% as.matrix() -> taxonomy_table
+dim(taxonomy_table)
+dim(wide_PA)
+rownames(taxonomy_table) <- wide_PA$sum.taxonomy
+
+TAX = tax_table(taxonomy_table)
+
+wide_PA %>%
+  ungroup() %>%
+  dplyr::select(-sum.taxonomy) %>% as.matrix() -> otu_table
+rownames(otu_table) <- wide_PA$sum.taxonomy
+
+OTU = otu_table(otu_table, taxa_are_rows = TRUE)
+physeq_obj = phyloseq(OTU, TAX, metadata)
+# 
+# subsurface_co1_sum.tax <- subset_samples(physeq_obj._CO1_sum.tax, Depth_bin == "Below 30m")
+# 
+# surface_co1_sum.tax <- subset_samples(physeq_obj._CO1_sum.tax, Depth_bin == "Above 30m")
+
+
+```
+
+
+# Power Analysis
+
+### iNEXT
+```{r}
+library(iNEXT)
+
+# Prepare REEF data
+reef_data <- merged_reef_survey %>%
+  group_by(Form, scientificname) %>%
+  summarize(Abundance = sum(Abundance, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = Form, values_from = Abundance, values_fill = 0) %>%
+  column_to_rownames(var = "scientificname")
+reef_otu <- as.matrix(reef_data)
+reef_otu_table <- otu_table(reef_otu, taxa_are_rows = TRUE)
+
+#Convert groups into vegan outputs
+veganComm_eDNA <- vegan_otu(physeq_obj)
+#veganComm_eDNA <- vegan_otu(ps.prop.pruned.v2)
+veganComm_REEF <- vegan_otu(reef_otu_table)
+
+###### iNEXT Species Accumulation Curves
+
+#Create List for iNEXT Species Incidence Frequencies
+mor_inc <-list ("eDNA" =t(veganComm_eDNA),
+                "REEF" =t(veganComm_REEF))
+
+species_incidence <-lapply(mor_inc, as.incfreq)
+
+#Convert to iNEXT format
+t <- seq(1, 300, by=1)
+out.inc2 <- iNEXT(species_incidence, q=0, datatype="incidence_freq", size=t)
+
+#out.inc2$DataInfo
+```
+
+```{r}
+# #Sample‐size‐based R/E curves
+# plot_co1 <- ggiNEXT(out.inc2, type=1, color.var="Both") +
+#   theme_bw(base_size = 18) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+#                                                                                                     panel.background = element_blank()) + xlab("Stations") + ylab("Taxa") + scale_colour_manual(values = c("dodgerblue4","#Ed820e"), name = "Group", labels = c("Above 30m", "Below 30m")) + scale_shape_discrete(name = "Group", labels = c("Above 30m", "Below 30m")) + scale_fill_manual(values = c("dodgerblue4","#Ed820e"),name = "Group", labels = c("Above 30m", "Below 30m")) +ggtitle(label = "eDNA vs REEF Species Accumulation Curves")+ggtitle(label = "", subtitle="eDNA vs REEF Species Accumulation Curves") +theme(axis.line = element_line(colour = "black"),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.text=element_text(size=16),
+#         axis.title=element_text(size=20,face="bold"),legend.title = element_text( size=12, face="bold"),legend.text = element_text(size=10,
+#                                      face="bold"), title = element_text(size=20, face="bold") ) + theme(legend.text=element_text(size=16), legend.title=element_text(size=20), axis.title.x=element_blank())
+# 
+# plot_co1
+
+plot_co1 <- ggiNEXT(out.inc2, type = 1, color.var = "Assemblage") +
+  theme_bw(base_size = 18) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"),
+    axis.text = element_text(size = 16),
+    axis.title = element_text(size = 20, face = "bold"),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 16)
+  ) +
+  xlab("Samples / Surveys") +
+  ylab("Taxa") +
+  scale_colour_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("eDNA", "REEF")
+  ) +
+  scale_shape_discrete(
+    name = "Group",
+    labels = c("eDNA", "REEF")
+  ) +
+  scale_fill_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("eDNA", "REEF")
+  ) +
+  ggtitle(label = "", subtitle = "eDNA vs REEF Species Accumulation Curves")
+
+# Display the plot
+print(plot_co1)
+
+```
+
+# Zeta Diversity
+
+```{r}
+library(zetadiv)
+```
+
+### eDNA
+```{r}
+
+phyloseq_to_df(physeq_obj) %>%
+  dplyr::select(.,-Kingdom,-Phylum, -Class,-Order,-Family,-Genus, -Species,sum.taxonomy, -OTU) -> phyloseq_obj_df
+
+#Read in Read Data
+Data_asvs_sites <- phyloseq_obj_df %>%  ungroup()
+
+#Get OTU names
+taxa_asvs_sites <- Data_asvs_sites$sum.taxonomy
+
+#Make a presence/absence matrix
+Data_asvs_sites %>% dplyr::select(-sum.taxonomy) %>%
+mutate_all(., ~replace(., . > 1, 1)) -> DataPA_asvs_sites
+
+DataPA_asvs_sites <- as.data.frame(t(DataPA_asvs_sites))
+colnames(DataPA_asvs_sites) <- taxa_asvs_sites
+
+#Calculate zeta diversity decay parameters and plots.
+phyloseq_obj_zeta <- Zeta.decline.ex(DataPA_asvs_sites,orders=1:20,plot=FALSE)
+
+```
+
+### REEF
+```{r}
+#Read in Read Data
+
+Data_asvs_sites <- reef_data %>%  ungroup()
+
+#Get OTU names
+
+taxa_asvs_sites <- Data_asvs_sites$sum.taxonomy
+
+#Make a presence/absence matrix
+Data_asvs_sites %>% 
+mutate_all(., ~replace(., . > 1, 1)) -> DataPA_asvs_sites
+
+DataPA_asvs_sites <- as.data.frame(t(DataPA_asvs_sites))
+colnames(DataPA_asvs_sites) <- taxa_asvs_sites
+
+#Calculate zeta diversity decay parameters and plots.
+reef_data_zeta <- Zeta.decline.ex(DataPA_asvs_sites,orders=1:20,plot=FALSE)
+```
+
+
+### Zeta Decay Figure
+
+```{r}
+phyloseq_obj_zeta[1:4] %>% as.tibble() %>% mutate(Group = "eDNA")-> eDNA_tib
+
+reef_data_zeta[1:4] %>% as.tibble() %>% mutate(Group = "REEF")-> REEF_tib
+
+bind_rows(eDNA_tib,REEF_tib) -> zdx_regions
+
+zdv_decay_sites <- zdx_regions %>%
+ggplot(aes(x= zeta.order, y= zeta.val, group=Group,color=Group, fill=Group)) +geom_point() +geom_line() + geom_ribbon(aes(ymin = zeta.val - zeta.val.sd, ymax = zeta.val + zeta.val.sd),alpha =0.1, colour = NA) + ggtitle(label="")+theme(axis.line = element_line(colour = "black"),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.text=element_text(size=16),
+        axis.title=element_text(size=20,face="bold"),legend.position="none",legend.title = element_text( size=12, face="bold"),legend.text = element_text(size=10,
+                                     face="bold"), title = element_text(size=20, face="bold") ) + theme(axis.title.x=element_blank(),legend.text=element_text(size=16), legend.title=element_text(size=20)) +ylab("Zeta Diversity") + xlab("Zeta Order - Stations") + scale_x_continuous(breaks=seq(1, 10, 1), limits=c(1,10))+ scale_colour_manual(values = c("seagreen3","plum"), name = "Group", labels = c("Above 30m", "Below 30m")) + scale_shape_discrete(name = "Group", labels = c("Above 30m", "Below 30m")) + scale_fill_manual(values = c("seagreen3","plum"),name = "Group", labels = c("Above 30m", "Below 30m"))
+
+zdv_decay_sites
+```
+### Species Retention Figure
+
+```{r}
+
+phyloseq_obj_zeta[5] %>% as.tibble() %>% mutate(Group = "eDNA",zeta.order = 1:n()) -> eDNA_multi
+
+reef_data_zeta[5] %>% as.tibble() %>% mutate(Group = "REEF",zeta.order = 1:n())-> REEF_uni
+
+bind_rows(eDNA_multi,REEF_uni) -> zdx_regions_ret_sites
+
+spec_ret_sites <- zdx_regions_ret_sites %>%
+ggplot(aes(x= zeta.order, y= ratio, group=Group,color=Group)) +geom_point() +geom_line() + ggtitle(label = "") +
+ theme(axis.line = element_line(colour = "black"),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.text=element_text(size=16),
+        axis.title=element_text(size=20,face="bold"),legend.position="none",legend.title = element_text( size=12, face="bold"),legend.text = element_text(size=10,
+                                     face="bold"), title = element_text(size=20, face="bold"),axis.title.x=element_blank() ) + theme(legend.text=element_text(size=16), legend.title=element_text(size=20)) +ylab("Zeta Ratio") + xlab("Zeta Order - Stations") +ylim(0,1) +scale_colour_manual(values = c("seagreen3","plum"), name = "Group", labels = c("Above 30m", "Below 30m")) + scale_shape_discrete(name = "Group", labels = c("Above 30m", "Below 30m")) + scale_fill_manual(values = c("seagreen3","plum"),name = "Group", labels = c("Above 30m", "Below 30m"))+ xlim(0,20)
+
+spec_ret_sites
+```
+
 
