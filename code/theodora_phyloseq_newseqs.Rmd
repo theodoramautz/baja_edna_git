@@ -2074,7 +2074,9 @@ print(venn_plot)
 #ggsave("venn_diagram_families.png", path = here("data", "figures", "new_figures"))
 ```
 
-```{r}
+Other Analyses by Filter / Survey
+```{r Redoing phyloseq setup}
+# Redoing Phyloseq Setup
 library(ggpmisc)
 library(metagMisc)
 library(ranacapa)
@@ -2083,15 +2085,15 @@ library(patchwork)
 varnames <- colnames(asvs_long)
 to_remove <- c("Sample_name", "Label", "Hash", "nReads")
 
-#Metadata
-metadata %>%  as.data.frame() -> sampledata
+# Metadata
+metadata %>% as.data.frame() -> sampledata
 rownames(sampledata) <- sampledata$Sample
 sample_data(sampledata) -> sampledata
 
-#ASV Reads
-
-c(setdiff(varnames,to_remove),"Tot") -> varnames_to_group
+# ASV Reads Processing
+c(setdiff(varnames, to_remove), "Tot") -> varnames_to_group
 asvs_long <- psmelt(ps.prop.pruned.v2)
+
 wide_PA <- asvs_long %>%
   group_by(Sample) %>%
   mutate(Tot = sum(Abundance)) %>%
@@ -2108,36 +2110,27 @@ wide_PA <- asvs_long %>%
 
 wide_PA %>%
   dplyr::select(sum.taxonomy) %>%
-   separate(sum.taxonomy, into=c("Kingdom",              "Phylum",               "Class"              
-,"Order",                "Family",               "Genus",               "Species"), sep=";", remove=F) %>%  
-  dplyr::select(sum.taxonomy, Kingdom,Phylum,Class, Order,Family, Genus, Species) %>%
-  distinct() %>% as.matrix() -> taxonomy_table
-dim(taxonomy_table)
-dim(wide_PA)
+  separate(sum.taxonomy, into = c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), sep = ";", remove = FALSE) %>%
+  dplyr::select(sum.taxonomy, Kingdom, Phylum, Class, Order, Family, Genus, Species) %>%
+  distinct() %>%
+  as.matrix() -> taxonomy_table
+
 rownames(taxonomy_table) <- wide_PA$sum.taxonomy
 
-TAX = tax_table(taxonomy_table)
+TAX <- tax_table(taxonomy_table)
 
 wide_PA %>%
   ungroup() %>%
-  dplyr::select(-sum.taxonomy) %>% as.matrix() -> otu_table
+  dplyr::select(-sum.taxonomy) %>%
+  as.matrix() -> otu_table
+
 rownames(otu_table) <- wide_PA$sum.taxonomy
+OTU <- otu_table(otu_table, taxa_are_rows = TRUE)
 
-OTU = otu_table(otu_table, taxa_are_rows = TRUE)
-physeq_obj = phyloseq(OTU, TAX, metadata)
-# 
-# subsurface_co1_sum.tax <- subset_samples(physeq_obj._CO1_sum.tax, Depth_bin == "Below 30m")
-# 
-# surface_co1_sum.tax <- subset_samples(physeq_obj._CO1_sum.tax, Depth_bin == "Above 30m")
-
-
+physeq_obj <- phyloseq(OTU, TAX, metadata)
 ```
 
-
-# Power Analysis
-
-### iNEXT
-```{r}
+```{r iNEXT}
 library(iNEXT)
 
 # Prepare REEF data
@@ -2146,39 +2139,43 @@ reef_data <- merged_reef_survey %>%
   summarize(Abundance = sum(Abundance, na.rm = TRUE), .groups = "drop") %>%
   pivot_wider(names_from = Form, values_from = Abundance, values_fill = 0) %>%
   column_to_rownames(var = "scientificname")
+
 reef_otu <- as.matrix(reef_data)
 reef_otu_table <- otu_table(reef_otu, taxa_are_rows = TRUE)
 
-#Convert groups into vegan outputs
+# Convert groups into vegan-compatible matrices
 veganComm_eDNA <- vegan_otu(physeq_obj)
-#veganComm_eDNA <- vegan_otu(ps.prop.pruned.v2)
 veganComm_REEF <- vegan_otu(reef_otu_table)
 
-###### iNEXT Species Accumulation Curves
+# Create List for iNEXT Species Incidence Frequencies
+mor_inc <- list("eDNA" = t(veganComm_eDNA),
+                "REEF" = t(veganComm_REEF))
 
-#Create List for iNEXT Species Incidence Frequencies
-mor_inc <-list ("eDNA" =t(veganComm_eDNA),
-                "REEF" =t(veganComm_REEF))
+species_incidence <- lapply(mor_inc, as.incfreq)
 
-species_incidence <-lapply(mor_inc, as.incfreq)
+# Convert to iNEXT format
+t <- seq(1, 300, by = 1)
+out.inc2 <- iNEXT(species_incidence, q = 0, datatype = "incidence_freq", size = t)
 
-#Convert to iNEXT format
-t <- seq(1, 300, by=1)
-out.inc2 <- iNEXT(species_incidence, q=0, datatype="incidence_freq", size=t)
+# Extract species richness for REEF
+max_species_reef <- out.inc2$DataInfo %>%
+  filter(Assemblage == "REEF") %>%
+  pull(S.obs)
 
-#out.inc2$DataInfo
+# Extract rarefaction data for eDNA
+edna_curve <- out.inc2$iNextEst$size_based %>%
+  filter(Assemblage == "eDNA")
+
+# Find the closest number of eDNA samples needed to reach REEF richness
+edna_needed <- edna_curve %>%
+  arrange(abs(qD - max_species_reef)) %>%
+  slice(1)
+
+print(edna_needed$t)  # Approximate eDNA sample size needed
+
 ```
 
-```{r}
-# #Sample‐size‐based R/E curves
-# plot_co1 <- ggiNEXT(out.inc2, type=1, color.var="Both") +
-#   theme_bw(base_size = 18) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-#                                                                                                     panel.background = element_blank()) + xlab("Stations") + ylab("Taxa") + scale_colour_manual(values = c("dodgerblue4","#Ed820e"), name = "Group", labels = c("Above 30m", "Below 30m")) + scale_shape_discrete(name = "Group", labels = c("Above 30m", "Below 30m")) + scale_fill_manual(values = c("dodgerblue4","#Ed820e"),name = "Group", labels = c("Above 30m", "Below 30m")) +ggtitle(label = "eDNA vs REEF Species Accumulation Curves")+ggtitle(label = "", subtitle="eDNA vs REEF Species Accumulation Curves") +theme(axis.line = element_line(colour = "black"),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.text=element_text(size=16),
-#         axis.title=element_text(size=20,face="bold"),legend.title = element_text( size=12, face="bold"),legend.text = element_text(size=10,
-#                                      face="bold"), title = element_text(size=20, face="bold") ) + theme(legend.text=element_text(size=16), legend.title=element_text(size=20), axis.title.x=element_blank())
-# 
-# plot_co1
-
+```{r Species Accumulation Figure}
 plot_co1 <- ggiNEXT(out.inc2, type = 1, color.var = "Assemblage") +
   theme_bw(base_size = 18) +
   theme(
@@ -2209,43 +2206,36 @@ plot_co1 <- ggiNEXT(out.inc2, type = 1, color.var = "Assemblage") +
   ) +
   ggtitle(label = "", subtitle = "eDNA vs REEF Species Accumulation Curves")
 
-# Display the plot
 print(plot_co1)
 
 ```
 
-# Zeta Diversity
-
-```{r}
+```{r Zeta Diversity}
 library(zetadiv)
-```
 
-### eDNA
-```{r}
-
+# Convert phyloseq to dataframe
 phyloseq_to_df(physeq_obj) %>%
-  dplyr::select(.,-Kingdom,-Phylum, -Class,-Order,-Family,-Genus, -Species,sum.taxonomy, -OTU) -> phyloseq_obj_df
+  dplyr::select(-Kingdom, -Phylum, -Class, -Order, -Family, -Genus, -Species, sum.taxonomy, -OTU) -> phyloseq_obj_df
 
-#Read in Read Data
-Data_asvs_sites <- phyloseq_obj_df %>%  ungroup()
+# Read in Read Data
+Data_asvs_sites <- phyloseq_obj_df %>% ungroup()
 
-#Get OTU names
+# Get OTU names
 taxa_asvs_sites <- Data_asvs_sites$sum.taxonomy
 
-#Make a presence/absence matrix
-Data_asvs_sites %>% dplyr::select(-sum.taxonomy) %>%
-mutate_all(., ~replace(., . > 1, 1)) -> DataPA_asvs_sites
+# Make a presence/absence matrix (Fix applied here)
+DataPA_asvs_sites <- Data_asvs_sites %>%
+  dplyr::select(-sum.taxonomy) %>%
+  mutate_all(~replace(., . > 0, 1))
 
 DataPA_asvs_sites <- as.data.frame(t(DataPA_asvs_sites))
 colnames(DataPA_asvs_sites) <- taxa_asvs_sites
 
-#Calculate zeta diversity decay parameters and plots.
-phyloseq_obj_zeta <- Zeta.decline.ex(DataPA_asvs_sites,orders=1:20,plot=FALSE)
-
+# Calculate zeta diversity decay parameters
+physeq_obj_zeta <- Zeta.decline.ex(DataPA_asvs_sites, orders = 1:20, plot = FALSE)
 ```
 
-### REEF
-```{r}
+```{r REEF zeta}
 #Read in Read Data
 
 Data_asvs_sites <- reef_data %>%  ungroup()
@@ -2265,15 +2255,11 @@ colnames(DataPA_asvs_sites) <- taxa_asvs_sites
 reef_data_zeta <- Zeta.decline.ex(DataPA_asvs_sites,orders=1:20,plot=FALSE)
 ```
 
+```{r Zeta Decay Figure}
+physeq_obj_zeta[1:4] %>% as_tibble() %>% mutate(Group = "eDNA") -> eDNA_tib
+reef_data_zeta[1:4] %>% as_tibble() %>% mutate(Group = "REEF") -> REEF_tib
 
-### Zeta Decay Figure
-
-```{r}
-phyloseq_obj_zeta[1:4] %>% as.tibble() %>% mutate(Group = "eDNA")-> eDNA_tib
-
-reef_data_zeta[1:4] %>% as.tibble() %>% mutate(Group = "REEF")-> REEF_tib
-
-bind_rows(eDNA_tib,REEF_tib) -> zdx_regions
+bind_rows(eDNA_tib, REEF_tib) -> zdx_regions
 
 zdv_decay_sites <- zdx_regions %>%
 ggplot(aes(x= zeta.order, y= zeta.val, group=Group,color=Group, fill=Group)) +geom_point() +geom_line() + geom_ribbon(aes(ymin = zeta.val - zeta.val.sd, ymax = zeta.val + zeta.val.sd),alpha =0.1, colour = NA) + ggtitle(label="")+theme(axis.line = element_line(colour = "black"),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.text=element_text(size=16),
@@ -2282,23 +2268,306 @@ ggplot(aes(x= zeta.order, y= zeta.val, group=Group,color=Group, fill=Group)) +ge
 
 zdv_decay_sites
 ```
-### Species Retention Figure
+
+```{r Species Retention Figure}
+# Extract species retention ratio from Zeta diversity results
+eDNA_multi <- tibble(
+  zeta.order = seq_along(physeq_obj_zeta[[5]]),  # Correct extraction from list
+  ratio = physeq_obj_zeta[[5]],  # Assign extracted numeric values
+  Group = "eDNA"
+)
+
+REEF_multi <- tibble(
+  zeta.order = seq_along(reef_data_zeta[[5]]),  # Correct extraction from list
+  ratio = reef_data_zeta[[5]],  # Assign extracted numeric values
+  Group = "REEF"
+)
+
+# Combine data for plotting
+zdx_regions_ret_sites <- bind_rows(eDNA_multi, REEF_multi)
+
+# Plot species retention figure
+spec_ret_sites <- zdx_regions_ret_sites %>%
+  ggplot(aes(x = zeta.order, y = ratio, group = Group, color = Group)) +
+  geom_point() +
+  geom_line() +
+  theme_minimal(base_size = 18) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"),
+    axis.text = element_text(size = 16),
+    axis.title = element_text(size = 20, face = "bold"),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 16)
+  ) +
+  labs(y = "Zeta Ratio", x = "Zeta Order", title = "Species Retention Across Zeta Orders") +
+  scale_y_continuous(limits = c(0, 1)) +
+  scale_x_continuous(limits = c(1, 20)) +  # Ensuring x-axis limits are clear
+  scale_color_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("eDNA", "REEF")
+  ) +
+  scale_fill_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("eDNA", "REEF")
+  )
+
+# Display the plot
+print(spec_ret_sites)
+```
+
+Other Analyses by Site
+```{r}
+varnames <- colnames(asvs_long)
+to_remove <- c("Sample_name", "Label", "Hash", "nReads")
+
+# Metadata
+metadata %>% as.data.frame() -> sampledata
+rownames(sampledata) <- sampledata$Sample
+sample_data(sampledata) -> sampledata
+
+# ASV Reads Processing
+c(setdiff(varnames, to_remove), "Tot") -> varnames_to_group
+asvs_long <- psmelt(ps.prop.pruned.v2)
+
+# Aggregate by Site_ID
+wide_PA <- asvs_long %>%
+  group_by(Site_ID) %>%
+  mutate(Tot = sum(Abundance)) %>%
+  unite(sum.taxonomy, c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), sep = ";", remove = FALSE) %>%
+  group_by(Site_ID, sum.taxonomy) %>%
+  dplyr::summarise(nReads = sum(Abundance), Tot = sum(Tot), .groups = 'drop') %>%  # FIXED: Sum Tot across sites
+  mutate(Prop.abund = nReads / Tot) %>%
+  group_by(sum.taxonomy) %>%
+  mutate(Colmax = max(Prop.abund),
+         eDNA.Index = Prop.abund / Colmax) %>%
+  dplyr::select(sum.taxonomy, Site_ID, eDNA.Index) %>%
+  mutate(eDNA.Index = replace_na(eDNA.Index, 0)) %>%
+  pivot_wider(names_from = Site_ID, values_from = eDNA.Index, values_fill = 0)
+
+# Ensure Site_ID is a valid column name before pivot_wider()
+colnames(wide_PA) <- make.names(colnames(wide_PA))
+
+# Convert to taxonomy table for phyloseq
+wide_PA %>%
+  dplyr::select(sum.taxonomy) %>%
+  separate(sum.taxonomy, into = c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), sep = ";", remove = FALSE) %>%
+  dplyr::select(sum.taxonomy, Kingdom, Phylum, Class, Order, Family, Genus, Species) %>%
+  distinct() %>%
+  as.matrix() -> taxonomy_table
+
+rownames(taxonomy_table) <- wide_PA$sum.taxonomy
+TAX <- tax_table(taxonomy_table)
+
+# Convert to OTU table
+wide_PA %>%
+  ungroup() %>%
+  dplyr::select(-sum.taxonomy) %>%
+  as.matrix() -> otu_table
+
+rownames(otu_table) <- wide_PA$sum.taxonomy
+OTU <- otu_table(otu_table, taxa_are_rows = TRUE)
+
+# Create phyloseq object
+physeq_obj <- phyloseq(OTU, TAX, metadata)
+```
 
 ```{r}
+library(iNEXT)
 
-phyloseq_obj_zeta[5] %>% as.tibble() %>% mutate(Group = "eDNA",zeta.order = 1:n()) -> eDNA_multi
+# Prepare REEF data - Aggregate by Site_ID
+reef_data <- merged_reef_survey %>%
+  group_by(Site_ID, scientificname) %>%
+  summarise(Abundance = sum(Abundance, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = Site_ID, values_from = Abundance, values_fill = 0) %>%
+  column_to_rownames(var = "scientificname")
 
-reef_data_zeta[5] %>% as.tibble() %>% mutate(Group = "REEF",zeta.order = 1:n())-> REEF_uni
+# Make sure Site_ID is valid name before pivoting
+colnames(reef_data) <- make.names(colnames(reef_data))
 
-bind_rows(eDNA_multi,REEF_uni) -> zdx_regions_ret_sites
+reef_otu <- as.matrix(reef_data)
+reef_otu_table <- otu_table(reef_otu, taxa_are_rows = TRUE)
 
-spec_ret_sites <- zdx_regions_ret_sites %>%
-ggplot(aes(x= zeta.order, y= ratio, group=Group,color=Group)) +geom_point() +geom_line() + ggtitle(label = "") +
- theme(axis.line = element_line(colour = "black"),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.text=element_text(size=16),
+# Convert groups into vegan-compatible matrices
+veganComm_eDNA <- vegan_otu(physeq_obj)
+veganComm_REEF <- vegan_otu(reef_otu_table)
+
+# Create List for iNEXT Species Incidence Frequencies
+mor_inc <- list("eDNA" = t(veganComm_eDNA),
+                "REEF" = t(veganComm_REEF))
+
+species_incidence <- lapply(mor_inc, as.incfreq)
+
+# Convert to iNEXT format
+t <- seq(1, 300, by = 1)
+out.inc2 <- iNEXT(species_incidence, q = 0, datatype = "incidence_freq", size = t)
+
+# Extract species richness for REEF
+max_species_reef <- out.inc2$DataInfo %>%
+  filter(Assemblage == "REEF") %>%
+  pull(S.obs)
+
+# Extract rarefaction data for eDNA
+edna_curve <- out.inc2$iNextEst$size_based %>%
+  filter(Assemblage == "eDNA")
+
+# Find the closest number of eDNA samples needed to reach REEF richness
+edna_needed <- edna_curve %>%
+  arrange(abs(qD - max_species_reef)) %>%
+  slice(1)
+
+print(edna_needed$t)  # Approximate eDNA sample size needed
+
+```
+
+```{r}
+plot_co1 <- ggiNEXT(out.inc2, type = 1, color.var = "Assemblage") +
+  theme_bw(base_size = 18) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"),
+    axis.text = element_text(size = 16),
+    axis.title = element_text(size = 20, face = "bold"),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 16)
+  ) +
+  xlab("Sites") +
+  ylab("Taxa") +
+  scale_colour_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("eDNA", "REEF")
+  ) +
+  scale_shape_discrete(
+    name = "Group",
+    labels = c("eDNA", "REEF")
+  ) +
+  scale_fill_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("eDNA", "REEF")
+  ) +
+  ggtitle(label = "", subtitle = "eDNA vs REEF Species Accumulation Curves")
+
+print(plot_co1)
+
+```
+
+```{r}
+# Ensure sample names are syntactically valid before using phyloseq_to_df
+sample_names(physeq_obj) <- make.names(sample_names(physeq_obj))
+
+# Convert phyloseq object to a dataframe
+phyloseq_to_df(physeq_obj) %>%
+  dplyr::select(-Kingdom, -Phylum, -Class, -Order, -Family, -Genus, -Species, sum.taxonomy, -OTU) -> phyloseq_obj_df
+
+# Read in Read Data
+Data_asvs_sites <- phyloseq_obj_df %>% ungroup()
+
+# Get OTU names
+taxa_asvs_sites <- Data_asvs_sites$sum.taxonomy
+
+# Make a presence/absence matrix (Fix applied here)
+DataPA_asvs_sites <- Data_asvs_sites %>%
+  dplyr::select(-sum.taxonomy) %>%
+  mutate_all(~replace(., . > 0, 1))
+
+DataPA_asvs_sites <- as.data.frame(t(DataPA_asvs_sites))
+colnames(DataPA_asvs_sites) <- taxa_asvs_sites
+
+# Calculate zeta diversity decay parameters
+physeq_obj_zeta <- Zeta.decline.ex(DataPA_asvs_sites, orders = 1:20, plot = FALSE)
+```
+
+```{r REEF zeta}
+#Read in Read Data
+
+Data_asvs_sites <- reef_data %>%  ungroup()
+
+#Get OTU names
+
+taxa_asvs_sites <- Data_asvs_sites$sum.taxonomy
+
+#Make a presence/absence matrix
+Data_asvs_sites %>% 
+mutate_all(., ~replace(., . > 1, 1)) -> DataPA_asvs_sites
+
+DataPA_asvs_sites <- as.data.frame(t(DataPA_asvs_sites))
+colnames(DataPA_asvs_sites) <- taxa_asvs_sites
+
+#Calculate zeta diversity decay parameters and plots.
+reef_data_zeta <- Zeta.decline.ex(DataPA_asvs_sites,orders=1:20,plot=FALSE)
+```
+
+```{r Zeta Decay Figure}
+physeq_obj_zeta[1:4] %>% as_tibble() %>% mutate(Group = "eDNA") -> eDNA_tib
+reef_data_zeta[1:4] %>% as_tibble() %>% mutate(Group = "REEF") -> REEF_tib
+
+bind_rows(eDNA_tib, REEF_tib) -> zdx_regions
+
+zdv_decay_sites <- zdx_regions %>%
+ggplot(aes(x= zeta.order, y= zeta.val, group=Group,color=Group, fill=Group)) +geom_point() +geom_line() + geom_ribbon(aes(ymin = zeta.val - zeta.val.sd, ymax = zeta.val + zeta.val.sd),alpha =0.1, colour = NA) + ggtitle(label="")+theme(axis.line = element_line(colour = "black"),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.text=element_text(size=16),
         axis.title=element_text(size=20,face="bold"),legend.position="none",legend.title = element_text( size=12, face="bold"),legend.text = element_text(size=10,
-                                     face="bold"), title = element_text(size=20, face="bold"),axis.title.x=element_blank() ) + theme(legend.text=element_text(size=16), legend.title=element_text(size=20)) +ylab("Zeta Ratio") + xlab("Zeta Order - Stations") +ylim(0,1) +scale_colour_manual(values = c("seagreen3","plum"), name = "Group", labels = c("Above 30m", "Below 30m")) + scale_shape_discrete(name = "Group", labels = c("Above 30m", "Below 30m")) + scale_fill_manual(values = c("seagreen3","plum"),name = "Group", labels = c("Above 30m", "Below 30m"))+ xlim(0,20)
+                                     face="bold"), title = element_text(size=20, face="bold") ) + theme(axis.title.x=element_blank(),legend.text=element_text(size=16), legend.title=element_text(size=20)) +ylab("Zeta Diversity") + xlab("Zeta Order - Stations") + scale_x_continuous(breaks=seq(1, 10, 1), limits=c(1,10))+ scale_colour_manual(values = c("seagreen3","plum"), name = "Group", labels = c("Above 30m", "Below 30m")) + scale_shape_discrete(name = "Group", labels = c("Above 30m", "Below 30m")) + scale_fill_manual(values = c("seagreen3","plum"),name = "Group", labels = c("Above 30m", "Below 30m"))
 
-spec_ret_sites
+zdv_decay_sites
+```
+
+```{r Species Retention Figure}
+# Extract species retention ratio from Zeta diversity results
+eDNA_multi <- tibble(
+  zeta.order = seq_along(physeq_obj_zeta[[5]]),  # Correct extraction from list
+  ratio = physeq_obj_zeta[[5]],  # Assign extracted numeric values
+  Group = "eDNA"
+)
+
+REEF_multi <- tibble(
+  zeta.order = seq_along(reef_data_zeta[[5]]),  # Correct extraction from list
+  ratio = reef_data_zeta[[5]],  # Assign extracted numeric values
+  Group = "REEF"
+)
+
+# Combine data for plotting
+zdx_regions_ret_sites <- bind_rows(eDNA_multi, REEF_multi)
+
+# Plot species retention figure
+spec_ret_sites <- zdx_regions_ret_sites %>%
+  ggplot(aes(x = zeta.order, y = ratio, group = Group, color = Group)) +
+  geom_point() +
+  geom_line() +
+  theme_minimal(base_size = 18) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"),
+    axis.text = element_text(size = 16),
+    axis.title = element_text(size = 20, face = "bold"),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 16)
+  ) +
+  labs(y = "Zeta Ratio", x = "Zeta Order", title = "Species Retention Across Zeta Orders") +
+  scale_y_continuous(limits = c(0, 1)) +
+  scale_x_continuous(limits = c(1, 20)) +  # Ensuring x-axis limits are clear
+  scale_color_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("eDNA", "REEF")
+  ) +
+  scale_fill_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("eDNA", "REEF")
+  )
+
+# Display the plot
+print(spec_ret_sites)
 ```
 
 
