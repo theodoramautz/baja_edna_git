@@ -59,9 +59,10 @@ names(tax)[1] <- "Sequence"
 metadata <- read.csv(here("data", "baja_edna_metadata.csv"), row.names=1)
 metadata <- metadata %>%
   mutate(Diver = recode(Diver,
-                           "D4 (A)" = "D4",
-                           "D4 (A) " = "D4",
-                           "D4 (B)" = "D4"))
+                        "D4 (A)" = "D4",
+                        "D4 (A) " = "D4",
+                        "D4 (B)" = "D4"),
+         MaxDepth = MaxDepth * 0.3048)
 
 # Convert transport time to minutes
 convert_to_minutes <- function(time_str) {
@@ -831,8 +832,8 @@ p1
 ```{r phyloseq NMDS hell}
 # Plot beta diversity in NMDS
 
-# Generate the ordinations using the Bray-Curtis distance metric
-ord.nmds.bray <- ordinate(ps.hell.pruned.v2, "NMDS", "bray")
+# Generate the ordinations using Euclidean distance metric
+ord.nmds.bray <- ordinate(ps.hell.pruned.v2, "NMDS", "euclidean")
 
 # Plot!
 
@@ -865,7 +866,7 @@ p3 <- plot_ordination(ps.hell.pruned.v2,
                       title="Max Depth") +
   #theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) +
-  labs(color = "Max Depth (feet)")
+  labs(color = "Max Depth (m)")
 p3
 #ggsave("beta_dep_peds.png", path = here("data", "figures"))
 
@@ -874,9 +875,9 @@ p4 <- plot_ordination(ps.hell.pruned.v2,
                       ord.nmds.bray, 
                       color="Diver", 
                       title="Diver") +
-  #theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) +
   labs(color = "Diver")
+
 p4
 #ggsave("beta_div_peds.png", path = here("data", "figures"))
 
@@ -943,10 +944,9 @@ p6 <- p6 +
         plot.margin = adjusted_margin)
 
 # Arrange plots in a grid
-plot_grid(p1, p2, p3, p4, p5, p6, 
+plot_grid(p1, p2, p3, p4, p5, #p6, 
           ncol = 2, align = "hv", axis = "tblr")  # Align horizontally and vertically
 #ggsave("beta_peds.png", path = here("data", "figures", "new_figures"), width = 12, height = 8, units = "in", dpi = 600)
-
 ```
 
 ```{r PCoA wisc}
@@ -969,7 +969,7 @@ pcoa
 # Ordinate
 ord.pcoa.bray.pruned.v2 <- ordinate(ps.hell.pruned.v2,
                                     method="PCoA",
-                                    distance="bray"
+                                    distance="euclidean"
 )
 
 # Plot
@@ -1020,7 +1020,7 @@ permanova.v2
 
 ```{r permanova hell}
 # Extract the distance matrix
-dist <- phyloseq::distance(ps.hell.pruned.v2, "bray")
+dist <- phyloseq::distance(ps.hell.pruned.v2, "euclidean")
 ps.perm.data <- data.frame(sample_data(ps.hell.pruned.v2))
 
 # Lat group
@@ -1079,42 +1079,18 @@ permanova <- adonis2(dist ~ Site,
                      permutations=999)
 permanova
 
-# Multifactorial PERMANOVAs
-permanova.v2 <- adonis2(dist ~ lat_group * Habitat,
-                     ps.perm.data,
-                     permutations=999)
-permanova.v2
-
-permanova.v2 <- adonis2(dist ~ lat_group * MaxDepth,
-                     ps.perm.data,
-                     permutations=999)
-permanova.v2
-
-permanova.v2 <- adonis2(dist ~ Habitat * MaxDepth,
-                     ps.perm.data,
-                     permutations=999)
-permanova.v2
-
-permanova.v2 <- adonis2(dist ~ lat_group * Site,
-                     ps.perm.data,
-                     permutations=999)
-permanova.v2
-
-permanova.v2 <- adonis2(dist ~ MaxDepth * Site,
-                     ps.perm.data,
-                     permutations=999)
-permanova.v2
-
 # Full model main effects
-permanova.v3 <- adonis2(dist ~ lat_group + Habitat + MaxDepth + Diver + Time + Site,
+permanova.v3 <- adonis2(dist ~ lat_group + MaxDepth + Habitat + Diver + Time,
                      ps.perm.data,
-                     permutations=999)
+                     permutations=999,
+                     by = "terms")
 permanova.v3
 
 # Full model interactions with relevant variables
-permanova.v4 <- adonis2(dist ~ lat_group * Habitat * MaxDepth * Site,
+permanova.v4 <- adonis2(dist ~ lat_group * MaxDepth * Habitat * Diver * Time,
                       ps.perm.data,
-                      permutations=999)
+                      permutations=999,
+                      by = "terms")
 permanova.v4
 
 # # Full model interactions
@@ -1165,7 +1141,12 @@ max_depth_lookup <- c(
   "13" = 119    # 110-119 feet
 )
 
+# Convert categorical Max Depth to numeric feet values
 merged_reef_survey$MaxDepth <- as.numeric(max_depth_lookup[as.character(merged_reef_survey$MaxDepth)])
+
+# Convert MaxDepth from feet to meters
+merged_reef_survey <- merged_reef_survey %>%
+  mutate(MaxDepth = MaxDepth * 0.3048)
 
 # # Calculate Simpson's diversity index for each unique value in the "Form" column
 # simpson_index <- merged_reef_survey %>%
@@ -1449,7 +1430,8 @@ p3 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = MaxDepth)) +
   geom_point() +
   labs(title = "Max Depth") +
   theme(plot.title = element_text(hjust = 0.5),
-        legend.position = "right")
+        legend.position = "right") +
+  labs(color = "Max Depth (m)")
 
 # Plot for Diver with compact legend
 p4 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = Diver)) +
@@ -1467,7 +1449,9 @@ p5 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = Time)) +
   geom_point() +
   labs(title = "Bottom Time") +
   theme(plot.title = element_text(hjust = 0.5),
-        legend.position = "right")
+        legend.position = "right") +
+  labs(color = "Bottom Time (mins)")
+p5
 
 # Define the fixed legend width and apply consistent styling to all plots
 fixed_legend_width <- 1.2
@@ -1480,7 +1464,6 @@ p_list <- lapply(p_list, function(p) {
 # Arrange all plots in a grid
 plot_grid(plotlist = p_list, ncol = 2, align = "hv", axis = "tblr")
 #ggsave("beta_rvs.png", path = here("data", "figures", "new_figures"), width = 12, height = 8, units = "in", dpi = 600)
-
 ```
 
 ```{r REEF permanova}
@@ -1522,32 +1505,18 @@ permanova <- adonis2(dist ~ Time, data = merged_reef_survey1,
                      permutations = 999)
 permanova
 
-# Multifactorial PERMANOVA
-permanova.v2 <- adonis2(dist ~ lat_group * Habitat,
-                     data = as.data.frame(merged_reef_survey1),
-                     permutations=999)
-permanova.v2
-
-permanova.v2 <- adonis2(dist ~ lat_group * Depth,
-                     data = as.data.frame(merged_reef_survey1),
-                     permutations=999)
-permanova.v2
-
-permanova.v2 <- adonis2(dist ~ Habitat * Depth,
-                     data = as.data.frame(merged_reef_survey1),
-                     permutations=999)
-permanova.v2
-
 # Full model main effects
 permanova.v3 <- adonis2(dist ~ lat_group + Habitat + Depth + Diver + Time,
                      data = as.data.frame(merged_reef_survey1),
-                     permutations=999)
+                     permutations=999,
+                     by = "terms")
 permanova.v3
 
 # Full model interaction effects
 permanova.v4<- adonis2(dist ~ lat_group * Habitat * Depth * Diver * Time,
                      data = as.data.frame(merged_reef_survey1),
-                     permutations=999)
+                     permutations=999,
+                     by = "terms")
 permanova.v4
 ```
 
@@ -1647,25 +1616,25 @@ world <- ne_countries(scale = "large", returnclass = "sf")
 ggplot() +
   geom_sf(data = world, fill = "gray", color = "black") +
   coord_sf(xlim = c(-118, -105), ylim = c(22, 33), expand = FALSE) +
-  geom_point(data = baja_metadata, aes(x = lon, y = lat), color = 'black', size = 1) +
-  labs(title = "Map of All Sights",
-       x = "Longitude", y = "Latitude") +
+  geom_point(data = baja_metadata, aes(x = lon, y = lat), 
+             shape = 21, fill = "seagreen3", color = "black", size = 2, stroke = 0.5) +
+  labs(x = "Longitude", y = "Latitude") +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) + 
   theme(panel.background = element_rect(fill = "lightblue", color = NA))
-#ggsave("baja_cali.png", path = here("data", "figures"))
+#ggsave(here("data", "figures", "baja_cali.png"), dpi = 300, bg = "white")
 
-# Plot sites
-ggplot() +
-  geom_sf(data = world, fill = "gray", color = "black") +
-  coord_sf(xlim = c(-115, -107), ylim = c(24.2, 29.6), expand = FALSE) +
-  geom_point(data = baja_metadata, aes(x = lon, y = lat), color = 'black', size = 1) +
-  labs(title = "Map of All Sights",
-       x = "Longitude", y = "Latitude") +
-  theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5)) + 
-  theme(panel.background = element_rect(fill = "lightblue", color = NA))
-#ggsave("all_sites.png", path = here("data", "figures"))
+# # Plot sites
+# ggplot() +
+#   geom_sf(data = world, fill = "gray", color = "black") +
+#   coord_sf(xlim = c(-115, -107), ylim = c(24.2, 29.6), expand = FALSE) +
+#   geom_point(data = baja_metadata, aes(x = lon, y = lat), color = 'black', size = 1) +
+#   labs(title = "Map of All Sights",
+#        x = "Longitude", y = "Latitude") +
+#   theme_minimal() +
+#   theme(plot.title = element_text(hjust = 0.5)) + 
+#   theme(panel.background = element_rect(fill = "lightblue", color = NA))
+# #ggsave("all_sites.png", path = here("data", "figures"))
 
 # Summarize data to get unique Site_IDs with latitudes and longitudes
 baja_metadata_unique <- baja_metadata %>%
@@ -1675,7 +1644,8 @@ baja_metadata_unique <- baja_metadata %>%
 ggplot() +
   geom_sf(data = world, fill = "gray", color = "black") +
   coord_sf(xlim = c(-111, -109.5), ylim = c(24.2, 25.2), expand = FALSE) +
-  geom_tile(data = baja_metadata, aes(x = lon, y = lat), color = 'black', size = 1) +
+  geom_point(data = baja_metadata, aes(x = lon, y = lat), 
+             shape = 21, fill = "seagreen3", color = "black", size = 3, stroke = 0.5) +
   geom_text_repel(data = baja_metadata_unique, aes(x = lon, y = lat, label = Site_ID),
                   size = 3, segment.size = 0.2, force = 0.7) +
   labs(title = "Map of Southern Sites",
@@ -1683,14 +1653,14 @@ ggplot() +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) + 
   theme(panel.background = element_rect(fill = "lightblue", color = NA))
-#ggsave("south_sites.png", path = here("data", "figures"))
-
+#ggsave(here("data", "figures", "south_sites.png"), dpi = 300, bg = "white")
 
 # Middle lat_group (25.7-27.9)
 ggplot() +
   geom_sf(data = world, fill = "gray", color = "black") + 
   coord_sf(xlim = c(-112, -110.5), ylim = c(25.7, 26.7), expand = FALSE) +
-  geom_tile(data = baja_metadata, aes(x = lon, y = lat), color = 'black', size = 1) +
+  geom_point(data = baja_metadata, aes(x = lon, y = lat), 
+             shape = 21, fill = "seagreen3", color = "black", size = 3, stroke = 0.5) +
   geom_text_repel(data = baja_metadata_unique, aes(x = lon, y = lat, label = Site_ID),
                   size = 3, segment.size = 0.2, force = 0.3) +
   labs(title = "Map of Middle Sites",
@@ -1698,21 +1668,22 @@ ggplot() +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) + 
   theme(panel.background = element_rect(fill = "lightblue", color = NA))
-#ggsave("middle_sites.png", path = here("data", "figures"))
+#ggsave(here("data", "figures", "middle_sites.png"), dpi = 300, bg = "white")
 
 # Northern lat_group (28-30)
 ggplot() +
   geom_sf(data = world, fill = "gray", color = "black") +
   coord_sf(xlim = c(-114, -112), ylim = c(28.3, 29.6), expand = FALSE) +
- geom_tile(data = baja_metadata, aes(x = lon, y = lat), color = 'black', size = 1) +
- geom_text_repel(data = baja_metadata_unique, aes(x = lon, y = lat, label = Site_ID),
+  geom_point(data = baja_metadata, aes(x = lon, y = lat), 
+             shape = 21, fill = "seagreen3", color = "black", size = 3, stroke = 0.8) +
+  geom_text_repel(data = baja_metadata_unique, aes(x = lon, y = lat, label = Site_ID),
                   size = 3, segment.size = 0.2, force = 0.9) +
- labs(title = "Map of Northern Sites",
+  labs(title = "Map of Northern Sites",
        x = "Longitude", y = "Latitude") +
- theme_minimal() +
- theme(plot.title = element_text(hjust = 0.5)) + 
- theme(panel.background = element_rect(fill = "lightblue", color = NA))
-#ggsave("north_sites.png", path = here("data", "figures"))
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+#ggsave(filename = here("data", "figures", "north_sites.png"), dpi = 300, bg = "white")
 ```
 
 ```{r Presence / Absence Heatmaps}
@@ -1826,12 +1797,13 @@ similarity_data <- inner_join(similarity_metric, presence_matrix, by = "Site_ID"
 #   theme(panel.background = element_rect(fill = "lightblue", color = NA))
 # ggsave("heatmap_all.png", path = here("data", "figures"))
 
-# Plot with more visible color scale
+# Plot maps
 ggplot() +
-  geom_sf(data = world, fill = "gray", color = "black") +  # Set ocean and land colors
+  geom_sf(data = world, fill = "gray", color = "black") + 
   coord_sf(xlim = c(-115, -107), ylim = c(24.2, 29.6), expand = FALSE) +
-  geom_point(data = similarity_data, aes(x = lon, y = lat, color = similarity)) +
-  scale_color_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity),
+             shape = 21, color = "black", size = 3, stroke = 0.8) +
+  scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
   labs(title = "Species Similarity by Site",
        x = "Longitude", y = "Latitude") +
   theme_minimal() +
@@ -1841,10 +1813,11 @@ ggplot() +
 
 # Southern lat_group (24-25.6)
 ggplot() +
-  geom_sf(data = world, fill = "gray", color = "black") +  # Set ocean and land colors
+  geom_sf(data = world, fill = "gray", color = "black") + 
   coord_sf(xlim = c(-111, -109.5), ylim = c(24.2, 25.2), expand = FALSE) +
-  geom_point(data = similarity_data, aes(x = lon, y = lat, color = similarity)) +
-  scale_color_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity), 
+             shape = 21, color = "black", size = 3, stroke = 0.8) + 
+  scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
   labs(title = "Similarity by Site, South",
        x = "Longitude", y = "Latitude") +
   theme_minimal() +
@@ -1852,12 +1825,14 @@ ggplot() +
   theme(panel.background = element_rect(fill = "lightblue", color = NA))
 #ggsave("heatmap_south.png", path = here("data", "figures", "new_figures"))
 
+
 # Middle lat_group (25.7-27.9)
 ggplot() +
-  geom_sf(data = world, fill = "gray", color = "black") +  # Set ocean and land colors
+  geom_sf(data = world, fill = "gray", color = "black") +
   coord_sf(xlim = c(-112, -110.5), ylim = c(25.7, 26.7), expand = FALSE) +
-  geom_point(data = similarity_data, aes(x = lon, y = lat, color = similarity)) +
-  scale_color_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity), 
+             shape = 21, color = "black", size = 3, stroke = 0.8) +
+  scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
   labs(title = "Similarity by Site, Middle",
        x = "Longitude", y = "Latitude") +
   theme_minimal() +
@@ -1868,10 +1843,11 @@ ggplot() +
 
 # Northern lat_group (28-30)
 ggplot() +
-  geom_sf(data = world, fill = "gray", color = "black") +  # Set ocean and land colors
+  geom_sf(data = world, fill = "gray", color = "black") +
   coord_sf(xlim = c(-114, -112), ylim = c(28.3, 29.6), expand = FALSE) +
-  geom_point(data = similarity_data, aes(x = lon, y = lat, color = similarity)) +
-  scale_color_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity), 
+             shape = 21, color = "black", size = 3, stroke = 0.8) +
+  scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
   labs(title = "Similarity by Site, North",
        x = "Longitude", y = "Latitude") +
   theme_minimal() +
@@ -1905,15 +1881,54 @@ library(broom)
 #             aes(x, y, label = paste("p-value:", signif(summary(linear_model)$coefficients["lat", 4], digits = 3))),
 #             color = "red", hjust = 1)
 
+# # Scatter plot of latitudes against similarity
+# scatter_plot <- ggplot(similarity_data, aes(x = lat, y = similarity)) +
+#   geom_point(color = "blue", alpha = 0.6) + 
+#   labs(title = "Scatter Plot of Latitude vs Species Overlap",
+#        x = "Latitude", y = "Species Overlap (%)") +
+#   theme_minimal() + 
+#   theme(plot.title = element_text(hjust = 0.5), 
+#         axis.title = element_text(face = "bold"), 
+#         axis.text = element_text(color = "black")) 
+# 
+# # Linear regression
+# linear_model <- lm(similarity ~ lat, data = similarity_data)
+# 
+# # Extracting regression coefficients and p-value
+# regression_coefficients <- tidy(linear_model)
+# slope <- regression_coefficients$estimate[2]
+# p_value <- regression_coefficients$p.value[2]
+# 
+# # R-squared value
+# r_squared <- summary(linear_model)$r.squared 
+# 
+# # Display scatter plot and regression line with annotations
+# scatter_plot + 
+#   geom_smooth(method = "lm", se = FALSE, color = "red") +
+#   geom_text(data = data.frame(x = max(similarity_data$lat) - 0.5, 
+#                               y = min(similarity_data$similarity) + 0.15),
+#             aes(x, y, label = paste("Slope:", round(slope, 3),
+#                                     "\nR-squared:", round(r_squared, 3),
+#                                     "\np-value:", signif(p_value, 3))),
+#             color = "red", hjust = 1, vjust = 1) 
+# #ggsave("scatter_overlap.png", path = here("data", "figures", "new_figures"), width = 10, height = 8, dpi = 300)
+
 # Scatter plot of latitudes against similarity
 scatter_plot <- ggplot(similarity_data, aes(x = lat, y = similarity)) +
-  geom_point(color = "blue", alpha = 0.6) + 
-  labs(title = "Scatter Plot of Latitude vs Species Overlap",
+  geom_point(aes(color = similarity), size = 3, alpha = 0.8) +  # Use similarity for color
+  scale_color_distiller(name = "Species Overlap", palette = "PuRd", direction = 2) +  # Pink scale
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed", size = 1.2) +  # Regression line
+  labs(title = "Latitude vs Species Overlap",
        x = "Latitude", y = "Species Overlap (%)") +
+  ylim(0, max(similarity_data$similarity)) +  # Ensure y-axis starts at 0
   theme_minimal() + 
-  theme(plot.title = element_text(hjust = 0.5), 
-        axis.title = element_text(face = "bold"), 
-        axis.text = element_text(color = "black")) 
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 18),  # Bigger, bold title
+    axis.title = element_text(face = "bold", size = 16),  # Bigger axis titles
+    axis.text = element_text(size = 14, color = "black"),  # Readable axis labels
+    legend.title = element_text(face = "bold", size = 14),  # Bold legend title
+    legend.text = element_text(size = 12)  # Bigger legend text
+  )
 
 # Linear regression
 linear_model <- lm(similarity ~ lat, data = similarity_data)
@@ -1926,16 +1941,20 @@ p_value <- regression_coefficients$p.value[2]
 # R-squared value
 r_squared <- summary(linear_model)$r.squared 
 
-# Display scatter plot and regression line with annotations
+# Display scatter plot and regression line with annotations in bottom right
 scatter_plot + 
-  geom_smooth(method = "lm", se = FALSE, color = "red") +
-  geom_text(data = data.frame(x = max(similarity_data$lat) - 0.5, 
-                              y = min(similarity_data$similarity) + 0.15),
-            aes(x, y, label = paste("Slope:", round(slope, 3),
-                                    "\nR-squared:", round(r_squared, 3),
-                                    "\np-value:", signif(p_value, 3))),
-            color = "red", hjust = 1, vjust = 1) 
+  annotate("text", 
+           x = max(similarity_data$lat) - 0.5,  # Near the right edge
+           y = min(similarity_data$similarity) * (max(similarity_data$similarity) - min(similarity_data$similarity)),  # Slightly above bottom
+           label = paste("Slope:", round(slope, 3),
+                         "\nR²:", round(r_squared, 3),
+                         "\np-value:", signif(p_value, 3)),
+           size = 6, fontface = "bold", color = "black", hjust = 1, vjust = 0) 
+
 #ggsave("scatter_overlap.png", path = here("data", "figures", "new_figures"), width = 10, height = 8, dpi = 300)
+
+
+# ggsave("scatter_overlap.png", path = here("data", "figures", "new_figures"), width = 10, height = 8, dpi = 300)
 
 # Scatter plots with alpha diversity scores
 # eDNA
@@ -2010,6 +2029,8 @@ scatter_plot +
 
 ```{r Venn Diagrams}
 library(ggvenn)
+library(ggVennDiagram)
+library(eulerr)
 
 # From phyloseq objects
 tax_table_ps.prop.pruned.v2 <- tax_table(ps.prop.pruned.v2)
@@ -2037,41 +2058,146 @@ colnames(filtered_REEF_species) <- "Species"
 # Common species
 common_species <- as.data.frame(intersect(unique_prop_species, filtered_REEF_species))
 
-# Make Species Venn
+# # Make Species Venn
+# species_list <- list(
+#   PEDS = unique_prop_species$Species,
+#   RVS = as.character(filtered_REEF_species$Species)
+# )
+# 
+# venn_plot <- ggvenn(species_list, columns = c("PEDS", "RVS"), 
+#                     stroke_size = 1, 
+#                     set_name_color = "black",
+#                     set_name_size = 7,
+#                     text_color = "black",
+#                     text_size = 5, fill_color = c("seagreen3", "plum"))  
+# 
+# print(venn_plot)
+#ggsave("venn_diagram.png", path = here("data", "figures", "new_figures"))
+
+# Prepare Species Data
 species_list <- list(
   PEDS = unique_prop_species$Species,
   RVS = as.character(filtered_REEF_species$Species)
 )
 
-venn_plot <- ggvenn(species_list, columns = c("PEDS", "RVS"), 
-                    stroke_size = 1, 
-                    set_name_color = "black",
-                    set_name_size = 7,
-                    text_color = "black",
-                    text_size = 5, fill_color = c("seagreen3", "plum"))  
+# Compute Counts for Proportional Venn Diagram
+species_venn_counts <- euler(species_list)
 
-print(venn_plot)
-#ggsave("venn_diagram.png", path = here("data", "figures", "new_figures"))
+# Get Absolute Counts
+counts <- species_venn_counts$original.values
+total <- sum(counts)
 
+# Generate Labels with Counts & Percentages
+labels <- paste0(counts, "\n(", round((counts / total) * 100, 1), "%)")
+
+# Plot Proportional Venn Diagram
+venn_species <- plot(species_venn_counts,
+                     fills = c("seagreen3", "plum"),
+                     edges = "black",
+                     labels = list(col = "black", fontsize = 15),
+                     quantities = list(labels = labels, cex = 1.2))
+print(venn_species)
+# ggsave(here("data", "figures", "new_figures", "venn_diagram_species.png"),
+#        plot = venn_species)
 
 # Make Families Venn
 prop_family <- subset(tax_table_ps.prop.pruned.v2, select = "Family")
 family_column <- as.data.frame(prop_family)
+# 
+# families_list <- list(
+#   PEDS = unique(family_column$Family), # includes one NA but looks like Venn ignores it
+#   RVS = unique(merged_reef_survey$family_scientific)
+# )
+# 
+# venn_plot <- ggvenn(families_list, columns = c("PEDS", "RVS"), 
+#                     stroke_size = 1, 
+#                     set_name_color = "black",
+#                     set_name_size = 7,
+#                     text_color = "black",
+#                     text_size = 5, fill_color = c("seagreen3", "plum"))  
+# print(venn_plot)
+#ggsave("venn_diagram_families.png", path = here("data", "figures", "new_figures"))
 
+# Prepare Families Data
 families_list <- list(
-  PEDS = unique(family_column$Family), # includes one NA but looks like Venn ignores it
+  PEDS = unique(family_column$Family),
   RVS = unique(merged_reef_survey$family_scientific)
 )
 
-venn_plot <- ggvenn(families_list, columns = c("PEDS", "RVS"), 
-                    stroke_size = 1, 
-                    set_name_color = "black",
-                    set_name_size = 7,
-                    text_color = "black",
-                    text_size = 5, fill_color = c("seagreen3", "plum"))  
+# Compute Counts for Proportional Venn Diagram
+families_venn_counts <- euler(families_list)
 
-print(venn_plot)
-#ggsave("venn_diagram_families.png", path = here("data", "figures", "new_figures"))
+# Get Absolute Counts
+counts <- families_venn_counts$original.values
+total <- sum(counts)
+
+# Generate Labels with Counts & Percentages
+labels <- paste0(counts, "\n(", round((counts / total) * 100, 1), "%)")
+
+# Plot Proportional Venn Diagram
+venn_families <- plot(families_venn_counts,
+                      fills = c("seagreen3", "plum"),
+                      edges = "black",
+                      labels = list(col = "black", fontsize = 15),
+                      quantities = list(labels = labels, cex = 1.2))
+print(venn_families)
+# ggsave(here("data", "figures", "new_figures", "venn_diagram_families.png"),
+#       plot = venn_families)
+
+### With original counts
+# Define species counts
+species_counts <- c(
+  PEDS = 36, 
+  RVS = 153, 
+  "PEDS&RVS" = 30  # Overlapping species
+)
+
+# Compute total for percentage calculation
+total_species <- sum(species_counts)
+
+# Compute percentages
+species_percentages <- round((species_counts / total_species) * 100, 1)
+
+# Generate labels with counts & percentages
+species_labels <- paste0(species_counts, "\n(", species_percentages, "%)")
+
+# Create Proportional Venn Diagram with Counts + Percentages
+venn_species <- plot(euler(species_counts),
+                     fills = c("seagreen3", "plum"),
+                     edges = "black",
+                     labels = list(col = "black", fontsize = 15),  # Large set labels
+                     quantities = list(labels = species_labels, cex = 1.2))  # Smaller text
+
+print(venn_species)
+# ggsave(here("data", "figures", "new_figures", "venn_diagram_species_old.png"),
+#       plot = venn_species)
+
+# Define family counts
+family_counts <- c(
+  PEDS = 10, 
+  RVS = 28, 
+  "PEDS&RVS" = 28  # Overlapping families
+)
+
+# Compute total for percentage calculation
+total_families <- sum(family_counts)
+
+# Compute percentages
+family_percentages <- round((family_counts / total_families) * 100, 1)
+
+# Generate labels with counts & percentages
+family_labels <- paste0(family_counts, "\n(", family_percentages, "%)")
+
+# Create Proportional Venn Diagram with Counts + Percentages
+venn_families <- plot(euler(family_counts),
+                      fills = c("seagreen3", "plum"),
+                      edges = "black",
+                      labels = list(col = "black", fontsize = 15),  # Large set labels
+                      quantities = list(labels = family_labels, cex = 1.2))  # Smaller text
+
+print(venn_families)
+# ggsave(here("data", "figures", "new_figures", "venn_diagram_families_old.png"),
+#        plot = venn_families)
 ```
 
 Other Analyses by Filter / Survey
@@ -2081,6 +2207,7 @@ library(ggpmisc)
 library(metagMisc)
 library(ranacapa)
 library(patchwork)
+library(tidyr)
 
 varnames <- colnames(asvs_long)
 to_remove <- c("Sample_name", "Label", "Hash", "nReads")
@@ -2097,7 +2224,7 @@ asvs_long <- psmelt(ps.prop.pruned.v2)
 wide_PA <- asvs_long %>%
   group_by(Sample) %>%
   mutate(Tot = sum(Abundance)) %>%
-  unite(sum.taxonomy, c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), sep = ";", remove = FALSE) %>%
+  tidyr::unite(sum.taxonomy, "Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species", sep = ";", remove = FALSE) %>%
   group_by(Sample, sum.taxonomy) %>%
   dplyr::summarise(nReads = sum(Abundance), Tot = first(Tot), .groups = 'drop') %>%
   mutate(Prop.abund = nReads / Tot) %>%
@@ -2176,7 +2303,7 @@ print(edna_needed$t)  # Approximate eDNA sample size needed
 ```
 
 ```{r Species Accumulation Figure}
-plot_co1 <- ggiNEXT(out.inc2, type = 1, color.var = "Assemblage") +
+plot_spac <- ggiNEXT(out.inc2, type = 1, color.var = "Assemblage") +
   theme_bw(base_size = 18) +
   theme(
     panel.grid.major = element_blank(),
@@ -2193,21 +2320,21 @@ plot_co1 <- ggiNEXT(out.inc2, type = 1, color.var = "Assemblage") +
   scale_colour_manual(
     values = c("seagreen3", "plum"),
     name = "Group",
-    labels = c("eDNA", "REEF")
+    labels = c("PEDS", "RVS")
   ) +
   scale_shape_discrete(
     name = "Group",
-    labels = c("eDNA", "REEF")
+    labels = c("PEDS", "RVS")
   ) +
   scale_fill_manual(
     values = c("seagreen3", "plum"),
     name = "Group",
-    labels = c("eDNA", "REEF")
-  ) +
-  ggtitle(label = "", subtitle = "eDNA vs REEF Species Accumulation Curves")
+    labels = c("PEDS", "RVS")
+  )
 
-print(plot_co1)
-
+print(plot_spac)
+# ggsave(here("data", "figures", "new_figures", "species_accumulation.png"),
+#        plot = plot_spac)
 ```
 
 ```{r Zeta Diversity}
@@ -2237,7 +2364,6 @@ physeq_obj_zeta <- Zeta.decline.ex(DataPA_asvs_sites, orders = 1:20, plot = FALS
 
 ```{r REEF zeta}
 #Read in Read Data
-
 Data_asvs_sites <- reef_data %>%  ungroup()
 
 #Get OTU names
@@ -2261,12 +2387,14 @@ reef_data_zeta[1:4] %>% as_tibble() %>% mutate(Group = "REEF") -> REEF_tib
 
 bind_rows(eDNA_tib, REEF_tib) -> zdx_regions
 
-zdv_decay_sites <- zdx_regions %>%
+zdv_decay <- zdx_regions %>%
 ggplot(aes(x= zeta.order, y= zeta.val, group=Group,color=Group, fill=Group)) +geom_point() +geom_line() + geom_ribbon(aes(ymin = zeta.val - zeta.val.sd, ymax = zeta.val + zeta.val.sd),alpha =0.1, colour = NA) + ggtitle(label="")+theme(axis.line = element_line(colour = "black"),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.text=element_text(size=16),
-        axis.title=element_text(size=20,face="bold"),legend.position="none",legend.title = element_text( size=12, face="bold"),legend.text = element_text(size=10,
-                                     face="bold"), title = element_text(size=20, face="bold") ) + theme(axis.title.x=element_blank(),legend.text=element_text(size=16), legend.title=element_text(size=20)) +ylab("Zeta Diversity") + xlab("Zeta Order - Stations") + scale_x_continuous(breaks=seq(1, 10, 1), limits=c(1,10))+ scale_colour_manual(values = c("seagreen3","plum"), name = "Group", labels = c("Above 30m", "Below 30m")) + scale_shape_discrete(name = "Group", labels = c("Above 30m", "Below 30m")) + scale_fill_manual(values = c("seagreen3","plum"),name = "Group", labels = c("Above 30m", "Below 30m"))
+        axis.title=element_text(size=20,face="bold"),legend.position="right",legend.title = element_text( size=12, face="bold"),legend.text = element_text(size=10,
+                                     face="bold"), title = element_text(size=20, face="bold") ) + theme(legend.text=element_text(size=16), legend.title=element_text(size=20)) +ylab("Zeta Diversity") + xlab("Zeta Order") + scale_x_continuous(breaks=seq(1, 10, 1), limits=c(1,10))+ scale_colour_manual(values = c("seagreen3","plum"), name = "Group", labels = c("PEDS", "RVS")) + scale_shape_discrete(name = "Group", labels = c("PEDS", "RVS")) + scale_fill_manual(values = c("seagreen3","plum"),name = "Group", labels = c("PEDS", "RVS"))
 
-zdv_decay_sites
+zdv_decay
+# ggsave(here("data", "figures", "new_figures", "zeta_decay.png"),
+#        plot = zdv_decay)
 ```
 
 ```{r Species Retention Figure}
@@ -2284,10 +2412,10 @@ REEF_multi <- tibble(
 )
 
 # Combine data for plotting
-zdx_regions_ret_sites <- bind_rows(eDNA_multi, REEF_multi)
+zdx_regions_ret <- bind_rows(eDNA_multi, REEF_multi)
 
 # Plot species retention figure
-spec_ret_sites <- zdx_regions_ret_sites %>%
+spec_ret <- zdx_regions_ret %>%
   ggplot(aes(x = zeta.order, y = ratio, group = Group, color = Group)) +
   geom_point() +
   geom_line() +
@@ -2302,26 +2430,27 @@ spec_ret_sites <- zdx_regions_ret_sites %>%
     legend.title = element_text(size = 20),
     legend.text = element_text(size = 16)
   ) +
-  labs(y = "Zeta Ratio", x = "Zeta Order", title = "Species Retention Across Zeta Orders") +
+  labs(y = "Zeta Ratio", x = "Zeta Order") +
   scale_y_continuous(limits = c(0, 1)) +
   scale_x_continuous(limits = c(1, 20)) +  # Ensuring x-axis limits are clear
   scale_color_manual(
     values = c("seagreen3", "plum"),
     name = "Group",
-    labels = c("eDNA", "REEF")
+    labels = c("PEDS", "RVS")
   ) +
   scale_fill_manual(
     values = c("seagreen3", "plum"),
     name = "Group",
-    labels = c("eDNA", "REEF")
+    labels = c("PEDS", "RVS")
   )
 
-# Display the plot
-print(spec_ret_sites)
+print(spec_ret)
+ggsave(here("data", "figures", "new_figures", "species_retention.png"),
+        plot = spec_ret, bg = "white")
 ```
 
 Other Analyses by Site
-```{r}
+```{r Phyloseq setup site}
 varnames <- colnames(asvs_long)
 to_remove <- c("Sample_name", "Label", "Hash", "nReads")
 
@@ -2338,7 +2467,7 @@ asvs_long <- psmelt(ps.prop.pruned.v2)
 wide_PA <- asvs_long %>%
   group_by(Site_ID) %>%
   mutate(Tot = sum(Abundance)) %>%
-  unite(sum.taxonomy, c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), sep = ";", remove = FALSE) %>%
+  tidyr::unite(sum.taxonomy, "Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species", sep   = ";", remove = FALSE) %>%
   group_by(Site_ID, sum.taxonomy) %>%
   dplyr::summarise(nReads = sum(Abundance), Tot = sum(Tot), .groups = 'drop') %>%  # FIXED: Sum Tot across sites
   mutate(Prop.abund = nReads / Tot) %>%
@@ -2376,7 +2505,7 @@ OTU <- otu_table(otu_table, taxa_are_rows = TRUE)
 physeq_obj <- phyloseq(OTU, TAX, metadata)
 ```
 
-```{r}
+```{r iNEXT site}
 library(iNEXT)
 
 # Prepare REEF data - Aggregate by Site_ID
@@ -2424,8 +2553,8 @@ print(edna_needed$t)  # Approximate eDNA sample size needed
 
 ```
 
-```{r}
-plot_co1 <- ggiNEXT(out.inc2, type = 1, color.var = "Assemblage") +
+```{r Species Accumulation Figure Site}
+plot_spac_site <- ggiNEXT(out.inc2, type = 1, color.var = "Assemblage") +
   theme_bw(base_size = 18) +
   theme(
     panel.grid.major = element_blank(),
@@ -2452,14 +2581,15 @@ plot_co1 <- ggiNEXT(out.inc2, type = 1, color.var = "Assemblage") +
     values = c("seagreen3", "plum"),
     name = "Group",
     labels = c("eDNA", "REEF")
-  ) +
-  ggtitle(label = "", subtitle = "eDNA vs REEF Species Accumulation Curves")
+  )
 
-print(plot_co1)
+print(plot_spac_site)
+# ggsave(here("data", "figures", "new_figures", "species_accumulation_site.png"),
+#        plot = plot_spac_site)
 
 ```
 
-```{r}
+```{r Zeta Diversity Site}
 # Ensure sample names are syntactically valid before using phyloseq_to_df
 sample_names(physeq_obj) <- make.names(sample_names(physeq_obj))
 
@@ -2485,7 +2615,7 @@ colnames(DataPA_asvs_sites) <- taxa_asvs_sites
 physeq_obj_zeta <- Zeta.decline.ex(DataPA_asvs_sites, orders = 1:20, plot = FALSE)
 ```
 
-```{r REEF zeta}
+```{r REEF Zeta Site}
 #Read in Read Data
 
 Data_asvs_sites <- reef_data %>%  ungroup()
@@ -2513,10 +2643,12 @@ bind_rows(eDNA_tib, REEF_tib) -> zdx_regions
 
 zdv_decay_sites <- zdx_regions %>%
 ggplot(aes(x= zeta.order, y= zeta.val, group=Group,color=Group, fill=Group)) +geom_point() +geom_line() + geom_ribbon(aes(ymin = zeta.val - zeta.val.sd, ymax = zeta.val + zeta.val.sd),alpha =0.1, colour = NA) + ggtitle(label="")+theme(axis.line = element_line(colour = "black"),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.text=element_text(size=16),
-        axis.title=element_text(size=20,face="bold"),legend.position="none",legend.title = element_text( size=12, face="bold"),legend.text = element_text(size=10,
-                                     face="bold"), title = element_text(size=20, face="bold") ) + theme(axis.title.x=element_blank(),legend.text=element_text(size=16), legend.title=element_text(size=20)) +ylab("Zeta Diversity") + xlab("Zeta Order - Stations") + scale_x_continuous(breaks=seq(1, 10, 1), limits=c(1,10))+ scale_colour_manual(values = c("seagreen3","plum"), name = "Group", labels = c("Above 30m", "Below 30m")) + scale_shape_discrete(name = "Group", labels = c("Above 30m", "Below 30m")) + scale_fill_manual(values = c("seagreen3","plum"),name = "Group", labels = c("Above 30m", "Below 30m"))
+        axis.title=element_text(size=20,face="bold"),legend.title = element_text( size=12, face="bold"),legend.text = element_text(size=10,
+                                     face="bold"), title = element_text(size=20, face="bold") ) + theme(legend.text=element_text(size=16), legend.title=element_text(size=20)) +ylab("Zeta Diversity") + xlab("Zeta Order") + scale_x_continuous(breaks=seq(1, 10, 1), limits=c(1,10))+ scale_colour_manual(values = c("seagreen3","plum"), name = "Group", labels = c("PEDS", "RVS")) + scale_shape_discrete(name = "Group", labels = c("PEDS", "RVS")) + scale_fill_manual(values = c("seagreen3","plum"),name = "Group", labels = c("PEDS", "RVS"))
 
 zdv_decay_sites
+# ggsave(here("data", "figures", "new_figures", "zeta_decay_sites.png"),
+#         plot = zdv_decay_sites)
 ```
 
 ```{r Species Retention Figure}
@@ -2552,7 +2684,7 @@ spec_ret_sites <- zdx_regions_ret_sites %>%
     legend.title = element_text(size = 20),
     legend.text = element_text(size = 16)
   ) +
-  labs(y = "Zeta Ratio", x = "Zeta Order", title = "Species Retention Across Zeta Orders") +
+  labs(y = "Zeta Ratio", x = "Zeta Order") +
   scale_y_continuous(limits = c(0, 1)) +
   scale_x_continuous(limits = c(1, 20)) +  # Ensuring x-axis limits are clear
   scale_color_manual(
@@ -2568,6 +2700,8 @@ spec_ret_sites <- zdx_regions_ret_sites %>%
 
 # Display the plot
 print(spec_ret_sites)
+ggsave(here("data", "figures", "new_figures", "species_retention_sites.png"),
+        plot = spec_ret_sites, width = 7.3, height = 4.5, dpi = 300, bg = "white")
 ```
 
 

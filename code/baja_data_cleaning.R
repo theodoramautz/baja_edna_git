@@ -22,17 +22,17 @@ baja_reads_df <- read.csv(here("data", "sequencing_data","rerun_bioinformatics_n
 # Find and replace "El Lavadero (Las Animas) " to get rid of space at the end;
 # Rename other column titles to be just 1 word with underscores
 
-# # Add BAJA_ to baja_asv_df
-# baja_asv_df$Sample_name <- paste0("BAJA_", baja_asv_df$Sample_name)
-# folder <- here("data", "sequencing_data")
+# Add BAJA_ to baja_asv_df
+baja_asv_df$Sample_name <- paste0("BAJA_", baja_asv_df$Sample_name)
+folder <- here("data", "sequencing_data")
 # path1 <- here::here(folder, "Baja_MiFish_ASVs.csv")
 # write.csv(baja_asv_df, file=path1, row.names=FALSE)
 
-## Add BAJA_ and remove leading 0s to baja_reads_df
-# baja_reads_df <- baja_reads_df %>%
-#   rename(Sample_name = X)
-# baja_reads_df$Sample_name <- sub("^0+", "", baja_reads_df$Sample_name)
-# baja_reads_df$Sample_name <- paste0("BAJA_", baja_reads_df$Sample_name)
+# Add BAJA_ and remove leading 0s to baja_reads_df
+baja_reads_df <- baja_reads_df %>%
+  rename(Sample_name = X)
+baja_reads_df$Sample_name <- sub("^0+", "", baja_reads_df$Sample_name)
+baja_reads_df$Sample_name <- paste0("BAJA_", baja_reads_df$Sample_name)
 # folder <- here("data", "sequencing_data")
 # path1 <- here::here(folder, "Baja_MiFish_reads_track.csv")
 # write.csv(baja_reads_df, file=path1, row.names=FALSE)
