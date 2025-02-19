@@ -19,6 +19,15 @@ data/~$taxa table comparison.xlsx
 data/baja_data_cleaning.RData
 data/reef_data_cleaning.RData
 data/README
+data/edna_data/BAJALIB_MFU_ASV_table.csv
+data/edna_data/BAJALIB_MFU_hash_key.csv
+data/edna_data/BAJALIB_MFU_taxonomy_output.csv
+data/edna_data/new_edna_data
+data/reference_databases/old_databases
+data/reference_databases/7 added sequences.fa
+data/reference_databases/Fish Tissue Sequences Rev Complement.fasta.rtf
+data/sequencing_data/*
+!data/sequencing_data/rerun_bioinformatics_newseqs/
 
 # User-specific files
 .Ruserdata
