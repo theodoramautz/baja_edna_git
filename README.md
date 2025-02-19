@@ -2,7 +2,7 @@
 Baja eDNA project git repository for code. 
 
 In the code folder:
-"baja_data_cleaning.R" "reef_data_cleaning.R" "baja_metadata.R" and "baja_analysis.R" were early analysis attempts and mostly go through some preliminary data cleaning steps. "baja_metadata.R" is for metadata used in bioinformatics workflow and "baja_analysis.R" has the metadata used for later analyses. Run those first to create the .RData files referenced in "theodora_phyloseq_newseqs.Rmd"
+"baja_data_cleaning.R" "reef_data_cleaning.R" "baja_metadata.R" and "baja_analysis.R" were early analysis attempts and mostly go through some preliminary data cleaning steps. "baja_metadata.R" is for metadata used in QIIME2 bioinformatics workflow and "baja_analysis.R" has the metadata used for later analyses. Run those first to create the .RData files referenced in "theodora_phyloseq_newseqs.Rmd"
 "dada2_tutorial-v3-Baja.Rmd" is the code to run all the bioinformatics.
 "theodora_phyloseq_newseqs.Rmd" is the main coding file with all analyses used in the paper.
 
