@@ -2,11 +2,12 @@
 Baja eDNA project git repository for code. 
 
 In the code folder:
-"baja_data_cleaning.R" "reef_data_cleaning.R" "baja_metadata.R" and "baja_analysis.R" were early analysis attempts and mostly do go through some preliminary data cleaning steps. Run those first.
+"baja_data_cleaning.R" "reef_data_cleaning.R" "baja_metadata.R" and "baja_analysis.R" were early analysis attempts and mostly go through some preliminary data cleaning steps. Run those first to create the .RData files referenced in "theodora_phyloseq_newseqs.Rmd"
 "dada2_tutorial-v3-Baja.Rmd" is the code to run all the bioinformatics.
 "theodora_phyloseq_newseqs.Rmd" is the main coding file with all analyses used in the paper.
 
 In the data folder:
+"baja_edna_metadata.csv" is the metadata file.
 "eDNA_data" folder has:
 "Bajalib_nextera_ud_indexes.xlsx - Baja library index.csv" which connects "sample" to "Seq_ID" which is how the sequencer identified each sample.
 "diver_number_key.xlsx" helps associate a diver number with a diver name for divers who carried PEDS on their dives.
