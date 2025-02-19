@@ -14,6 +14,9 @@ data/merged_baja.csv
 data/merged_reef.csv
 data/reef_species.csv
 data/taxa table comparison.xlsx
+data/~$taxa table comparison.xlsx
+data/baja_data_cleaning.RData
+data/reef_data_cleaning.RData
 data/README
 
 # User-specific files
