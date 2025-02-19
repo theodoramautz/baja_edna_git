@@ -9,9 +9,11 @@
 *.Rda
 *.RData
 *.RDataTmp
+baja_edna_git.Rproj
 
 # Data
 data/baja_raw_sequences
+data/README
 data/figures
 data/merged_baja.csv
 data/merged_reef.csv
