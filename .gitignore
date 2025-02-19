@@ -27,6 +27,7 @@ data/edna_data/BAJALIB_MFU_ASV_table.csv
 data/edna_data/BAJALIB_MFU_hash_key.csv
 data/edna_data/BAJALIB_MFU_taxonomy_output.csv
 data/edna_data/new_edna_data
+data/edna_data/diver_number_key.xlsx
 data/reference_databases/old_databases
 data/reference_databases/7 added sequences.fa
 data/reference_databases/Fish Tissue Sequences Rev Complement.fasta.rtf
