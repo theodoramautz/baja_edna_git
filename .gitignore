@@ -11,6 +11,15 @@
 *.RDataTmp
 baja_edna_git.Rproj
 
+# Code
+code/baja_analysis.R
+code/baja_data_cleaning.R
+code/baja_metadata.R
+code/bioinformatics_priors.R
+code/dada2_tutorial-v3-Baja.Rmd
+code/reef_data_cleaning.R
+code/theodora_phyloseq_newseqs.Rmd
+
 # Data
 data/baja_raw_sequences
 data/README
