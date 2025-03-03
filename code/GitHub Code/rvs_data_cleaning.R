@@ -1,3 +1,5 @@
+# Some pre-analysis data cleaning steps
+
 # Load the required libraries
 library(dplyr)
 library(ggplot2)
@@ -32,27 +34,18 @@ merged_reef_survey <- merged3_reef_survey %>%
     TRUE ~ scientificname # Keep the existing name if none of the conditions match
   ))
 
-# Add habitat description to each site
-reef_habitat_types <- read.csv(here("data", "reef_data", "REEF habitat types.csv"))
-merged_reef_survey$Description <- reef_habitat_types$Description[match(merged_reef_survey$Habitat, reef_habitat_types$Habitat)]
-
 # Add lat and lon to sites
 merged_reef_survey <- merged_reef_survey %>%
   left_join(sites_lat_lon, by = "Site_ID")
 
 # Convert lat and lon to decimal-degrees
-# Function to separate degrees and minute-decimals
 separate_degrees_minutes <- function(coord) {
-  # Split the coordinate into degrees and minute-decimals
   split_coord <- strsplit(coord, " ")
-  # Extract degrees and minute-decimals
   degrees <- as.numeric(sapply(split_coord, `[`, 1))
   minutes_decimal <- as.numeric(sapply(split_coord, `[`, 2))
-  # Create a data frame with separated degrees and minute-decimals
   return(data.frame(deg = degrees, min = minutes_decimal))
 }
 
-# Apply the function to separate degrees and minute-decimals for latitude and longitude
 merged_reef_survey <- cbind(
   merged_reef_survey,
   separate_degrees_minutes(merged_reef_survey$lat),
@@ -94,9 +87,7 @@ family <- read.table(here("data", "reef_data", "TEPfamily0823.txt"),
 colnames(family)[1] <- "Family"
 colnames(family)[2] <- "family_scientific"
 family <- family[, 1:2]
-# Merge dataframes without sorting
 merged_reef_survey <- merge(merged_reef_survey, family, by = "Family", all.x = TRUE)
-# Move the first column to the end
 merged_reef_survey <- merged_reef_survey[, c(2:length(merged_reef_survey), 1)]
 
 # Write to .csv
@@ -107,4 +98,3 @@ write.csv(merged_reef_survey, file=path3, row.names=FALSE)
 # Save the workspace to a .RData file
 path4 <- here::here(folder, "reef_data_cleaning.RData")
 save.image(file=path4)
-

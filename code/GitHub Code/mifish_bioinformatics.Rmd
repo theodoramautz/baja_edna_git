@@ -1,0 +1,179 @@
+---
+title: "dada2_tutorial"
+output: html_document
+date: "2024-02-09"
+---
+
+```{r libraries}
+library(tidyverse)
+library(dada2)
+library(digest)
+library(seqinr)
+library(here)
+```
+
+```{r files}
+# Edit as necessary to set the path to the directory where trimmed sequences are.
+path <- here("data", "baja_raw_sequences", "cutadapt-test")
+list.files(path)
+```
+
+```{r filenames}
+# Set 'pattern' to whatever your forward and reverse files end with
+fnFs <- sort(list.files(path, pattern="_R1_001-trimmed.fastq", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern="_R2_001-trimmed.fastq", full.names = TRUE))
+
+# Extract sample names, assuming filenames have format: SAMPLENAME-NUMBER_XXX.fastq
+sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 2)
+
+# Check the sample names are as expected
+sample.names
+```
+
+```{r read quality}
+# Plot the read quality profiles of the first two samples
+plotQualityProfile(fnFs[1:2])
+```
+
+```{r filter trim}
+# Place filtered files in subdirectory
+# _v2 added to file subdirectory to create a new one for prior rerun
+filtFs <- file.path(path, "dada2_filtered_v2", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "dada2_filtered_v2", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtFs) <- sample.names
+names(filtRs) <- sample.names
+
+# Filter and trim sequences based on the truncation lengths previously generated
+out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs, 
+                     truncLen=c(110,110), maxN=0, maxEE=c(2,2), 
+                     truncQ=2, rm.phix=TRUE,
+                     compress=TRUE, multithread=TRUE)
+head(out)
+```
+
+```{r filter empties}
+# Check for samples that are empty (fewer than 10 sequences) following all the processing
+out.df <- as.data.frame(out)
+out.df.filt <- dplyr::filter(out.df, reads.out > 0)
+sample.names <- sapply(strsplit(rownames(out.df.filt), "_"), `[`, 2)
+filtFs.filt <- filtFs[sample.names]
+filtRs.filt <- filtRs[sample.names]
+out.filt <- out[rownames(out.df.filt), ]
+```
+
+```{r error rates}
+# DADA2 uses a subset of samples to "learn" the sequencing error profiles
+errF <- learnErrors(filtFs.filt, multithread=TRUE)
+errR <- learnErrors(filtRs.filt, multithread=TRUE)
+plotErrors(errF, nominalQ=TRUE)
+```
+
+```{r sample inference}
+# Set priors
+priorsF <- c("CACCGCGGTTATACGAGAGACCCAAGTTGTTAGGCATCGGCGTAAAGGGTGGTTAAGGCAATACCCAAACTAAAGCCGAACATCTTCCAAGCCGTCATACGCACACGAAGACAAGAAGCCCGATAACGAAAGTGGCTCTAACCTGCCTGAACCCACGAAAGCTATGACA", "CACCGCGGTTATACGAGAGGTCCAAGTTGTTAGCCCTCGGCGTAAAGAGTGGTTAAAGTAAAAAACAAAACTGAGGTCGAACATCTTCAAGGCAGTTATACGCTCCCGAGGATATGAAGCACAATCACGAAAGTAGCCTCACCCTGCTTGAACCCACGAAAGCTAGGACA", "CACCGCGGTTATACGAGAGACCCAAGTTGATAGACCCCGGCGTAAAGAGTGGTTAAGATTTATTTATACTTAAAGCCGAACGCCCTCAAAGCAGTTATACGCACCCGAGGGTATGAAGCCCAATCGCGAAAGTGGCTTTATTACTCCTGACTCCACGAAAGCTAAGGAA")
+priorsR <- c("TGTCATAGCTTTCGTGGGTTCAGGCAGGTTAGAGCCACTTTCGTTATCGGGCTTCTTGTCTTCGTGTGCGTATGACGGCTTGGAAGATGTTCGGCTTTAGTTTGGGTATTGCCTTAACCACCCTTTACGCCGATGCCTAACAACTTGGGTCTCTCGTATAACCGCGGTG", "TGTCCTAGCTTTCGTGGGTTCAAGCAGGGTGAGGCTACTTTCGTGATTGTGCTTCATATCCTCGGGAGCGTATAACTGCCTTGAAGATGTTCGACCTCAGTTTTGTTTTTTACTTTAACCACTCTTTACGCCGAGGGCTAACAACTTGGACCTCTCGTATAACCGCGGTG", "TTCCTTAGCTTTCGTGGAGTCAGGAGTAATAAAGCCACTTTCGCGATTGGGCTTCATACCCTCGGGTGCGTATAACTGCTTTGAGGGCGTTCGGCTTTAAGTATAAATAAATCTTAACCACTCTTTACGCCGGGGTCTATCAACTTGGGTCTCTCGTATAACCGCGGTG")
+
+# Run inference
+dadaFs <- dada(filtFs.filt, err=errF, multithread=TRUE, priors = priorsF)
+dadaRs <- dada(filtRs.filt, err=errR, multithread=TRUE, priors = priorsR)
+```
+
+```{r merge reads}
+# Merge the paired-end reads
+mergers <- mergePairs(dadaFs, filtFs.filt, dadaRs, filtRs.filt, verbose=TRUE)
+
+# Inspect the merger data.frame from the first sample
+head(mergers[[1]])
+```
+
+```{r asv table}
+# Make the ASV table
+seqtab <- makeSequenceTable(mergers)
+dim(seqtab)
+
+# Inspect distribution of sequence lengths
+table(nchar(getSequences(seqtab)))
+```
+
+```{r remove chimeras}
+# Remove chimeras
+seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=TRUE, verbose=TRUE)
+dim(seqtab.nochim)
+
+sum(seqtab.nochim)/sum(seqtab)
+```
+
+```{r size filtering}
+# Filter out reads longer or shorter than our desired length; in this case MiFish lengths should be between 163 and 185 bp
+indexes.to.keep <- which((nchar(colnames(seqtab.nochim)) <= 185) & ((nchar(colnames(seqtab.nochim))) >= 163))
+cleaned.seqtab.nochim <- seqtab.nochim[,indexes.to.keep]
+```
+
+```{r sanity check}
+# Make a table to show how many reads were retained at each step of the process
+getN <- function(x) sum(getUniques(x))
+track <- cbind(out.filt, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(cleaned.seqtab.nochim))
+colnames(track) <- c("input", "filtered", "denoisedF", "denoisedR", "merged", "nonchim")
+rownames(track) <- sample.names
+head(track)
+```
+
+```{r quality control}
+# Check for samples that are empty (fewer than 10 sequences) following all the processing
+track.df <- as.data.frame(track)
+track.df.filt <- dplyr::filter(track.df, nonchim > 10)
+sample.names.filt <- rownames(track.df.filt)
+cleaned.seqtab.nochim.filt <- cleaned.seqtab.nochim[sample.names.filt,]
+```
+
+```{r assign taxonomy}
+# Assign taxonomy; ahange the database file name to include the path on your system
+taxa <- assignTaxonomy(cleaned.seqtab.nochim.filt, "/Users/theodoramautz/Desktop/SIO/Research/baja_edna/baja_edna_git/data/reference_databases/12S_efc_derep_and_clean-Baja-v3.fa", tryRC=TRUE, multithread=TRUE)
+
+# Remove sequence rownames for display only
+taxa.print <- taxa 
+rownames(taxa.print) <- NULL
+
+head(taxa.print)
+```
+
+```{r save files}
+# Save the taxa table (no read data) and read provenance table
+taxa.df <- as.data.frame(taxa)
+write.csv(taxa.df, here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_taxa_table_newseqs_v4.csv"), row.names=TRUE)
+
+track.df <- as.data.frame(track)
+write.csv(track.df, here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_reads_track_v4.csv"), row.names=TRUE)
+
+# Create hash key and link each ASV to a unique hash
+seqtab.nochim.df <- as.data.frame(cleaned.seqtab.nochim.filt)
+conv_table <- tibble(Hash = "", Sequence = "")
+Hashes <- map_chr(colnames(seqtab.nochim.df), ~ digest(.x, algo = "sha1", serialize = F, skip = "auto"))
+conv_table <- tibble(Hash = Hashes, Sequence = colnames(seqtab.nochim.df))
+
+# Write hash key into a csv
+write_csv(conv_table, here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_hash_key_v4.csv"))
+
+# Write hash key into a fasta
+write.fasta(sequences = as.list(conv_table$Sequence), 
+            names = as.list(conv_table$Hash),
+            file.out = here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_ASVs_v4.fasta"))
+
+# Make the ASV table
+sample.df <- tibble::rownames_to_column(seqtab.nochim.df, "Sample_name")
+sample.df <- data.frame(append(sample.df, c(Label="MiFish"), after = 1))
+current_asv <- bind_cols(sample.df %>%
+                         dplyr::select(Sample_name, Label),
+                         seqtab.nochim.df)
+current_asv <- current_asv %>%
+  pivot_longer(cols = c(-Sample_name, -Label),
+               names_to = "Sequence",
+               values_to = "nReads") %>%
+  filter(nReads > 0)
+current_asv <- merge(current_asv, conv_table, by="Sequence") %>%
+  select(-Sequence) %>%
+  relocate(Hash, .after=Label)
+
+# Write asv table into a csv
+write_csv(current_asv, here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_ASVs_v4.csv"))
+```

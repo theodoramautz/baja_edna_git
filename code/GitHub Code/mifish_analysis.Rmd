@@ -1,0 +1,1402 @@
+---
+title: "theodora_phyloseq_newseqs"
+output: html_document
+date: "2024-08-14"
+---
+Working on eDNA data (PEDS)
+```{r phyloseq setup}
+library(phyloseq); packageVersion("phyloseq")
+library(Biostrings); packageVersion("Biostrings")
+library(ggplot2); packageVersion("ggplot2")
+library(tidyverse)
+library(here)
+library(dplyr)
+library(vegan)
+theme_set(theme_bw())
+```
+
+```{r phyloseq preprocessing}
+# Import output files from DADA2. Adjust folder and file names as necessary for your data
+asvs_long <- read.csv(here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_ASVs_v4.csv"))
+
+# To match our other data files, we appended "BAJA_" prefix to each sample name
+asvs_long <- asvs_long %>%
+  mutate(Sample_name = paste0("BAJA_", Sample_name))
+
+# Pivot the data into wide form, with Hash as rows and Sample_name as columns
+asvs <- asvs_long %>%
+  select(-Label) %>%  # Disregard the Label column
+  pivot_wider(names_from = Sample_name, values_from = nReads, values_fill = 0)
+
+# Set Hash as row names and remove the Hash column
+asvs <- asvs %>%
+  column_to_rownames(var = "Hash")
+
+# For added sequences. Adjust folder and file names as necessary for your data
+tax <- read.csv(here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_taxa_table_newseqs_v4.csv"))
+hash <- read.csv(here("data", "sequencing_data", "rerun_bioinformatics_newseqs","Baja_MiFish_hash_key_v4.csv"))
+
+# We renamed column X to Sequence to merge by sequence later
+names(tax)[1] <- "Sequence"
+
+# Import the metadata file. Adjust folder and file names as necessary for your data
+# We edited diver D4 naming errors, and converted MaxDepth to meters
+metadata <- read.csv(here("data", "baja_edna_metadata.csv"), row.names=1)
+metadata <- metadata %>%
+  mutate(Diver = recode(Diver,
+                        "D4 (A)" = "D4",
+                        "D4 (A) " = "D4",
+                        "D4 (B)" = "D4"),
+         MaxDepth = MaxDepth * 0.3048)
+
+# We converted transport time to minutes
+convert_to_minutes <- function(time_str) {
+  time_str <- tolower(time_str)  # Convert to lowercase for uniformity
+  # Initialize minutes and hours
+  minutes <- 0
+  hours <- 0
+  # Extract hours
+  if (grepl("hour", time_str)) {
+    hours <- as.numeric(gsub("([0-9]+) hour.*", "\\1", time_str))
+  }
+  # Extract minutes
+  if (grepl("min", time_str)) {
+    minutes <- as.numeric(gsub(".*?([0-9]+) min.*", "\\1", time_str))
+  }
+  # Calculate total minutes
+  total_minutes <- hours * 60 + minutes
+  return(total_minutes)
+}
+# Apply the conversion to the transport_time column
+metadata$TransportTime <- sapply(metadata$TransportTime, convert_to_minutes)
+```
+
+```{r phyloseq format}
+# Format the ASV and tax tables for phyloseq
+
+# In this case each ASV (taxon) is a row
+ASV = otu_table(asvs, taxa_are_rows=TRUE)
+
+# For phyloseq taxonomy, merge the tax and hash tables to create a list of hashes with associated taxonomy
+
+# Merge on the 'Sequence' column and then drop it from the merged data frame
+tax_ps <- left_join(hash, tax, by='Sequence')
+tax_ps <- select(tax_ps, -Sequence)
+
+# Convert the hashes to row names and convert the whole data frame to a matrix
+rownames(tax_ps) <- tax_ps$Hash
+tax_ps <- select(tax_ps, -Hash)
+tax_ps_mat <- as.matrix(tax_ps)
+
+# Convert the taxonmy table into phyloseq format
+TAX <- tax_table(tax_ps_mat)
+```
+
+```{r metadata}
+# Our Baja metadata row names were not the same as the ASV table column names, so here we edit to match
+metadata <- metadata[order(rownames(metadata)), ]
+
+# If you removed any samples during DADA2 processing, they need to be removed from the metadata file too
+# Check the number of samples in the ASV table
+length(colnames(asvs))
+# Check the number of samples in the metadata table
+length(rownames(metadata))
+```
+
+```{r filter metadata}
+# If they are not the same, make a list of the names you want to keep
+samples.to.keep <- colnames(asvs)
+metadata.filt <-filter(metadata, row.names(metadata) %in%
+                                     samples.to.keep)
+
+# Check again that the number of metadata rows matches the number of ASV table columns
+length(colnames(asvs))
+length(rownames(metadata.filt))
+
+# Convert the metadata table into phyloseq format (use "metadata.filt" instead of "metadata" if you filtered out metadata rows)
+MET <- sample_data(metadata)
+```
+
+```{r phyloseq prep}
+# Make the phyloseq object from the ASV table, taxonomy table, and metadata table
+ps <- phyloseq(ASV, MET, TAX)
+
+# Transform data to proportions as appropriate for Bray-Curtis distances
+ps.prop <- transform_sample_counts(ps, function(otu) otu/sum(otu))
+
+# The sample_data has sample names as rownames, but we can add a column with the names as well
+sample_data(ps.prop)['sample.id'] <-
+  row.names(sample_data(ps.prop))
+```
+
+```{r sample summary}
+# Generate some basic read stats: mean, max and min of sample read counts
+smin <- min(sample_sums(ps))
+smean <- mean(sample_sums(ps))
+smax <- max(sample_sums(ps))
+
+## Get an overview of the read distribution across samples using a histogram
+# First make a data frame with a column for the read counts of each sample
+sample_sum_df <- data.frame(sum = sample_sums(ps))
+
+# Histogram of sample read counts
+p <- ggplot(sample_sum_df, aes(x = sum)) + 
+  geom_histogram(color = "black", fill = "indianred", binwidth = 2000) +
+  ggtitle("Distribution of sample sequencing depth") + 
+  xlab("Read counts") +
+  ylab("Number of samples") +
+  scale_y_continuous(limits = c(0, 12), expand = c(0,0)) +
+  scale_x_continuous(limits = c(0, 400000), expand = c(0,0))
+
+p
+
+# NOTE: You may get a warning message saying 5 rows of data were removed due to missing values. This is a misleading warning message, none of the data were removed and this plot shows all the sample counts.
+```
+
+```{r phyloseq bar plots with contaminants}
+# Grouping by site
+top20 <- names(sort(taxa_sums(ps.prop),
+                    decreasing=TRUE))[1:20]
+
+ps.top20 <- prune_taxa(top20, ps.prop)
+
+bar <- plot_bar(ps.top20, x="Site_ID", fill="Family") +
+  facet_wrap(~lat_group, scales="free_x")
+bar
+```
+
+```{r phyloseq filtertax}
+# We had to filter out contaminant families from the previous bar graph
+ps.prop.pruned <- subset_taxa(ps.prop,
+                                Family != "Bovidae")
+ps.prop.pruned <- subset_taxa(ps.prop.pruned,
+                                Family != "Hominidae")
+ps.prop.pruned <- subset_taxa(ps.prop.pruned,
+                                Family != "Suidae")
+ps.prop.pruned <- subset_taxa(ps.prop.pruned,
+                                Family != "Felidae")
+
+# Remove empty samples (after removing contaminants) from the data set.
+ps.prop.pruned.v2 <- prune_samples(sample_sums(ps.prop.pruned)>0, 
+                                   ps.prop.pruned)
+
+# Top 35 because that's how many hashes are needed to get to top 20 families
+top35 <- names(sort(taxa_sums(ps.prop.pruned.v2),
+                    decreasing=TRUE))[1:35]
+
+ps.top35 <- prune_taxa(top35, ps.prop.pruned.v2)
+
+bar2 <- plot_bar(ps.top35, x="Site_ID", fill="Family") +
+  facet_wrap(~lat_group, scales="free_x")
+bar2
+```
+
+Beta diversity
+```{r phyloseq NMDS}
+# Plot beta diversity in NMDS - first we tried with un-transformed data
+
+# Generate the ordinations using the Bray-Curtis distance metric
+ord.nmds.bray <- ordinate(ps.prop.pruned.v2, "NMDS", "bray")
+
+# Plot
+p1 <- plot_ordination(ps.prop.pruned.v2, 
+                      ord.nmds.bray, 
+                      color="lat_group", 
+                      title="Bray NMDS",
+                      label= 'sample.id')
+p1
+```
+
+```{r outliers}
+# To explore the phyloseq, convert the object components to data frames
+asv <- data.frame(otu_table(ps.prop.pruned.v2))
+tax <- data.frame(tax_table(ps.prop.pruned.v2))
+sd <- data.frame(sample_data(ps.prop.pruned.v2))
+
+# Using the "ASV" data frame let's look at BAJA_125, one of our outliers (check with your own)
+BAJA_125 <- subset(asv, ,"BAJA_125")
+max(BAJA_125$BAJA_125)
+
+# Almost all (94%) of the ASVs belong to the ASV with the hash "303ab366b448fc492f429b0b17e4edf1219c7707". Find the taxonomy of that ASV
+
+tax_hash <- tax_ps %>% 
+  filter(row.names(tax_ps) %in%
+           "303ab366b448fc492f429b0b17e4edf1219c7707")
+
+# This ASV belongs to a mackerel! It does not appear to be contamination, just a sample unusually dominated by one species. We can leave it as a legitimate sample for other analyses.
+
+# Now for BAJA_28
+BAJA_28 <- subset(asv, ,"BAJA_28")
+max(BAJA_28$BAJA_28)
+
+# 56% of the ASVs belong to the ASV with the hash "0fd4f3e4ea2b9002259e5c78c407f3c8869a1073". Find the taxonomy of that ASV
+
+tax_hash <- tax_ps %>% 
+  filter(row.names(tax_ps) %in%
+           "0fd4f3e4ea2b9002259e5c78c407f3c8869a1073")
+
+# This ASV belongs to a sea chub! It does not appear to be contamination, just a sample unusually dominated by one species. We can leave it as a legitimate sample for other analyses.
+
+# Now for BAJA_49
+BAJA_49 <- subset(asv, ,"BAJA_49")
+max(BAJA_49$BAJA_49)
+
+# 39% of the ASVs belong to the ASV with the hash "9395453e45fd7d6a08ddc4e44d6c733556f12442". Find the taxonomy of that ASV.
+
+tax_hash <- tax_ps %>% 
+  filter(row.names(tax_ps) %in%
+           "9395453e45fd7d6a08ddc4e44d6c733556f12442")
+
+# This ASV belongs to Benthosema pterotum, skinnycheek lanternfish! It does not appear to be contamination, just a sample unusually dominated by one species. We can leave it as a legitimate sample for other analyses.
+```
+
+Standardizing data
+```{r standardize}
+# Hellinger transformation, which is better at dealing with eDNA datasets
+# vegan equivalent: decostand
+ps.hell <- transform_sample_counts(ps, function(x) sqrt(x / sum(x)))
+ps.hell.pruned <- subset_taxa(ps.hell, Family != "Bovidae")
+ps.hell.pruned <- subset_taxa(ps.hell.pruned, Family != "Hominidae")
+ps.hell.pruned <- subset_taxa(ps.hell.pruned, Family != "Suidae")
+ps.hell.pruned <- subset_taxa(ps.hell.pruned, Family != "Felidae")
+ps.hell.pruned.v2 <- prune_samples(sample_sums(ps.hell.pruned)>0, 
+                                   ps.hell.pruned)
+sample_data(ps.hell.pruned.v2)$sample.id <- sample_data(ps.prop.pruned.v2)$sample.id
+```
+
+```{r phyloseq NMDS hell}
+# Plot beta diversity in NMDS
+
+# Generate the ordinations using Euclidean distance metric (because of Hellinger transformation)
+ord.nmds.bray <- ordinate(ps.hell.pruned.v2, "NMDS", "euclidean")
+
+# Plot
+# Latitude Group
+p1 <- plot_ordination(ps.hell.pruned.v2, 
+                      ord.nmds.bray, 
+                      color="lat_group", 
+                      title="Lat Group") +
+                      #label="sample.id") +
+  scale_color_discrete(name = "Lat Group", labels = c("South", "Middle", "North")) +
+  #theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+p1
+
+# Max Depth
+p2 <- plot_ordination(ps.hell.pruned.v2, 
+                      ord.nmds.bray, 
+                      color="MaxDepth", 
+                      title="Max Depth") +
+  #theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(color = "Max Depth (m)")
+p2
+
+# Diver
+p3 <- plot_ordination(ps.hell.pruned.v2, 
+                      ord.nmds.bray, 
+                      color="Diver", 
+                      title="Diver") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(color = "Diver")
+
+p3
+
+# Bottom Time
+p4 <- plot_ordination(ps.hell.pruned.v2, 
+                      ord.nmds.bray, 
+                      color="BottomExposureTime_minutes", 
+                      title="Bottom Time") +
+  #theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(color = "Bottom Time (mins)")
+p4
+
+#Plot all together on one graph
+# Define a fixed width for legends
+fixed_legend_width <- 1.2  # Adjust to desired width
+
+# Apply consistent legend width and margins for each plot
+p1 <- p1 + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
+p2 <- p2 + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
+p3 <- p3 + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
+p4 <- p4 + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
+                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
+
+# Arrange plots in a grid
+plot_grid(p1, p2, p3, p4, 
+          ncol = 2, align = "hv", axis = "tblr")  # Align horizontally and vertically
+```
+
+Running statistics on beta diversity
+```{r permanova hell}
+# Extract the distance matrix
+dist <- phyloseq::distance(ps.hell.pruned.v2, "euclidean")
+ps.perm.data <- data.frame(sample_data(ps.hell.pruned.v2))
+
+# Extract the variables of interest
+# Lat group
+lat_group <- ps.perm.data$lat_group
+
+# Max Depth
+MaxDepth <- ps.perm.data$MaxDepth
+
+# Diver
+Diver <- ps.perm.data$Diver
+
+# Bottom Time
+Time <- ps.perm.data$BottomExposureTime_minutes
+
+# Full model
+permanova <- adonis2(dist ~ lat_group + MaxDepth + Diver + Time,
+                      ps.perm.data,
+                      permutations=999,
+                      by = "terms")
+permanova
+```
+
+
+Working on REEF data (RVS)
+```{r REEF data loading}
+# Load data from the REEF Visual Surveys (RVS).
+load(here("data", "reef_data_cleaning.RData"))
+
+# We renamed certain MemberID numbers to match D1-D4 from eDNA data and then renamed all to D + number to simplify the names
+merged_reef_survey <- merged_reef_survey %>%
+  mutate(MemberID = recode(MemberID,
+                           "11" = "D4",
+                           "78191" = "D1",
+                           "25096" = "D2",
+                           "31171" = "D3",
+                           "78297" = "D5",
+                           "51042" = "D6",
+                           "68368" = "D7",
+                           "27929" = "D8",
+                           "39071" = "D9",
+                           "44564" = "D10",
+                           "46383" = "D11",
+                           "49697" = "D12",
+                           "52032" = "D13",
+                           "61018" = "D14",
+                           "74999" = "D15"))
+merged_reef_survey$MemberID <- factor(merged_reef_survey$MemberID, levels = paste0("D", 1:15))
+
+# We fixed categorical Max Depth info
+max_depth_lookup <- c(
+  "1" = 0,      # snorkel
+  "2" = 9,      # <10 feet
+  "3" = 19,     # 10-19 feet
+  "4" = 29,     # 20-29 feet
+  "5" = 39,     # 30-39 feet
+  "6" = 49,     # 40-49 feet
+  "7" = 59,     # 50-59 feet
+  "8" = 69,     # 60-69 feet
+  "9" = 79,     # 70-79 feet
+  "10" = 89,    # 80-89 feet
+  "11" = 99,    # 90-99 feet
+  "12" = 109,   # 100-109 feet
+  "13" = 119    # 110-119 feet
+)
+
+# We converted categorical Max Depth to numeric feet values
+merged_reef_survey$MaxDepth <- as.numeric(max_depth_lookup[as.character(merged_reef_survey$MaxDepth)])
+
+# We converted Max Depth to meters
+merged_reef_survey <- merged_reef_survey %>%
+  mutate(MaxDepth = MaxDepth * 0.3048)
+```
+
+```{r REEF nmds}
+# Prepare the NMDS data
+nmds_REEF_subset <- merged_reef_survey %>%
+  group_by(Form, scientificname) %>%
+  arrange(desc(Abundance)) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(Form, scientificname, Abundance)
+
+# Convert columns to appropriate types
+nmds_REEF_subset$Form <- as.numeric(nmds_REEF_subset$Form)
+nmds_REEF_subset$Abundance <- as.numeric(nmds_REEF_subset$Abundance)
+
+# Create matrix for NMDS
+nmds_matrix_REEF <- pivot_wider(nmds_REEF_subset,
+                                names_from = scientificname,
+                                values_from = Abundance,
+                                values_fill = 0)
+
+# Dissimilarity matrix and NMDS using the gower method (good for dealing with categorical abundances)
+diss_matrix_REEF <- vegdist(nmds_matrix_REEF, method = "gower")
+nmds_result_REEF <- metaMDS(diss_matrix_REEF)
+
+# Match metadata and prepare NMDS coordinates
+merged_reef_survey1 <- merged_reef_survey[match(nmds_matrix_REEF$Form, merged_reef_survey$Form), ]
+nmds_coords <- nmds_result_REEF$points
+nmds_df <- data.frame(NMDS1 = nmds_coords[,1], NMDS2 = nmds_coords[,2],
+                      lat_group = as.factor(merged_reef_survey1$lat_group),
+                      MaxDepth = merged_reef_survey1$MaxDepth,
+                      Diver = as.factor(merged_reef_survey1$MemberID),
+                      Time = merged_reef_survey1$BTime)
+
+# Create individual plots with consistent themes and compact legends
+
+# Plot for Lat Group
+p1 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = lat_group)) +
+  geom_point() +
+  labs(title = "Lat Group") +
+  scale_color_discrete(name = "Lat Group", labels = c("South", "Middle", "North")) +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "right")
+
+# Plot for MaxDepth
+p2 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = MaxDepth)) +
+  geom_point() +
+  labs(title = "Max Depth") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "right") +
+  labs(color = "Max Depth (m)")
+
+# Plot for Diver
+p3 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = Diver)) +
+  geom_point() +
+  labs(title = "Diver") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "right",
+        legend.key.size = unit(0.4, "cm"),
+        legend.text = element_text(size = 8),
+        legend.spacing.y = unit(0.1, "cm")) +
+  guides(color = guide_legend(ncol = 2))
+
+# Plot for Bottom Time
+p4 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = Time)) +
+  geom_point() +
+  labs(title = "Bottom Time") +
+  theme(plot.title = element_text(hjust = 0.5),
+        legend.position = "right") +
+  labs(color = "Bottom Time (mins)")
+
+# Define the fixed legend width and apply consistent styling to all plots
+fixed_legend_width <- 1.2
+p_list <- list(p1, p2, p3, p4)
+p_list <- lapply(p_list, function(p) {
+  p + theme(legend.key.width = unit(fixed_legend_width, "cm"),
+            plot.margin = unit(c(1, 1, 1, 1), "lines"))
+})
+
+# Arrange all plots in a grid
+plot_grid(plotlist = p_list, ncol = 2, align = "hv", axis = "tblr")
+```
+
+```{r REEF permanova}
+# Extract the distance matrix
+dist <- vegan::vegdist(nmds_matrix_REEF, method = "gower")
+
+# Lat group
+lat_group <- merged_reef_survey1$lat_group
+
+# Depth
+Depth <- merged_reef_survey1$MaxDepth
+
+# Diver
+Diver <- merged_reef_survey1$MemberID
+
+# Bottom Time
+Time <- merged_reef_survey1$BTime
+
+# Full model
+permanova <- adonis2(dist ~ lat_group + Depth + Diver + Time,
+                     data = as.data.frame(merged_reef_survey1),
+                     permutations=999,
+                     by = "terms")
+permanova
+```
+
+```{r REEF family barplots}
+# Filter the top 20 families
+# Count the number of sightings for each family
+family_counts <- merged_reef_survey %>%
+  count(family_scientific)
+
+# Select the top 20 families by number of sightings
+top20 <- family_counts %>%
+  arrange(desc(n)) %>%
+  slice(1:20)
+
+# Filter merged_reef_survey to include only the top 20 families
+merged_reef_top20 <- merged_reef_survey %>%
+  filter(family_scientific %in% top20$family_scientific)
+
+# Calculate the number of sightings (frequency) of each family_scientific within each site and lat_group
+family_counts <- merged_reef_top20 %>%
+  group_by(Site_ID, family_scientific, lat_group) %>%
+  summarise(sightings = n()) %>%
+  ungroup()
+
+# Plot the barplot with facet_wrap and black outlines
+ggplot(family_counts, aes(x = Site_ID, y = sightings, fill = family_scientific)) +
+  geom_bar(stat = "identity", color = "black") +
+  facet_wrap(~ lat_group, scales = "free_x") +
+  labs(title = "Number of Sightings of Top 20 Families at Each Site",
+       x = "Site ID", y = "Number of Sightings") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.key = element_rect(color = "black")) +
+  scale_fill_discrete(name = "Family")
+
+```
+
+
+Family overlap
+```{r Family overlap eDNA}
+# Define the list of families to keep
+families_to_keep <- c("Balistidae", "Gobiidae", "Haemulidae", "Kyphosidae", "Labridae", "Labrisomidae", "Pomacentridae", "Serranidae", "Tetraodontidae")
+
+# Filter out the specified families from ps.prop.pruned.v2
+ps.filtered <- subset_taxa(ps.prop.pruned.v2, Family %in% families_to_keep)
+
+top <- names(sort(taxa_sums(ps.filtered),
+                    decreasing=TRUE))
+
+ps.top <- prune_taxa(top, ps.filtered)
+
+bar2 <- plot_bar(ps.top, x="Site_ID", fill="Family") +
+  facet_wrap(~lat_group, scales="free_x")
+
+bar2
+```
+
+```{r Family overlap REEF}
+filtered_merged_reef_survey <- merged_reef_survey[merged_reef_survey$family_scientific %in% families_to_keep, ]
+
+# Calculate the number of sightings (frequency) of each family_scientific within each site and lat_group
+family_counts <- filtered_merged_reef_survey %>%
+  group_by(Site_ID, family_scientific, lat_group) %>%
+  summarise(sightings = n()) %>%
+  ungroup()
+
+# Plot the barplot with facet_wrap and black outlines
+ggplot(family_counts, aes(x = Site_ID, y = sightings, fill = family_scientific)) +
+  geom_bar(stat = "identity", color = "black") +
+  facet_wrap(~ lat_group, scales = "free_x") +
+  labs(#title = "Number of Sightings of Top 20 Families at Each Site",
+       x = "Site ID", y = "Sightings") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 270, hjust = 1),
+        legend.key = element_rect(color = "black"),
+        strip.background = element_rect(fill = "lightgray", color = "black", size = 0.5),
+        strip.text = element_text(color = "black"),
+        panel.border = element_rect(color = "black", fill = NA, size = 1),
+        axis.ticks.x = element_line(color = "black", size = 0.5)) +
+  scale_fill_discrete(name = "Family")
+```
+
+
+Maps, regression, Venn diagrams
+```{r Maps}
+library(rnaturalearth)
+library(sf)
+library(ggrepel)
+
+# Load libraries from cleaned data (see baja_data_cleaning.R and reef_data_cleaning.R for more information on how data were cleaned)
+load(here("data", "baja_data_cleaning.RData"))
+load(here("data", "reef_data_cleaning.RData"))
+baja_metadata <- read.csv(here("data", "baja_edna_metadata.csv"))
+
+# Get world map data
+world <- ne_countries(scale = "large", returnclass = "sf")
+
+# Plot Gulf of CA
+ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") +
+  coord_sf(xlim = c(-118, -105), ylim = c(22, 33), expand = FALSE) +
+  geom_point(data = baja_metadata, aes(x = lon, y = lat), 
+             shape = 21, fill = "seagreen3", color = "black", size = 2, stroke = 0.5) +
+  labs(x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+
+# Summarize data to get unique Site_IDs with latitudes and longitudes
+baja_metadata_unique <- baja_metadata %>%
+  distinct(Site_ID, lat, lon)
+
+# Southern lat_group (24-25.6)
+ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") +
+  coord_sf(xlim = c(-111, -109.5), ylim = c(24.2, 25.2), expand = FALSE) +
+  geom_point(data = baja_metadata, aes(x = lon, y = lat), 
+             shape = 21, fill = "seagreen3", color = "black", size = 3, stroke = 0.5) +
+  geom_text_repel(data = baja_metadata_unique, aes(x = lon, y = lat, label = Site_ID),
+                  size = 3, segment.size = 0.2, force = 0.7) +
+  labs(title = "Map of Southern Sites",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+
+# Middle lat_group (25.7-27.9)
+ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") + 
+  coord_sf(xlim = c(-112, -110.5), ylim = c(25.7, 26.7), expand = FALSE) +
+  geom_point(data = baja_metadata, aes(x = lon, y = lat), 
+             shape = 21, fill = "seagreen3", color = "black", size = 3, stroke = 0.5) +
+  geom_text_repel(data = baja_metadata_unique, aes(x = lon, y = lat, label = Site_ID),
+                  size = 3, segment.size = 0.2, force = 0.3) +
+  labs(title = "Map of Middle Sites",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+
+# Northern lat_group (28-30)
+ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") +
+  coord_sf(xlim = c(-114, -112), ylim = c(28.3, 29.6), expand = FALSE) +
+  geom_point(data = baja_metadata, aes(x = lon, y = lat), 
+             shape = 21, fill = "seagreen3", color = "black", size = 3, stroke = 0.8) +
+  geom_text_repel(data = baja_metadata_unique, aes(x = lon, y = lat, label = Site_ID),
+                  size = 3, segment.size = 0.2, force = 0.9) +
+  labs(title = "Map of Northern Sites",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+```
+
+```{r Presence/absence heatmaps}
+library(RColorBrewer)
+
+# RVS
+# Make a frequency table for abundance of species sightings in REEF surveys 
+frequency_table <- table(merged_reef_survey$scientificname)
+species_frequency_df <- as.data.frame(frequency_table)
+species_frequency_df <- species_frequency_df[order(species_frequency_df$Freq), ]
+# List of unique REEF species
+REEF_species <- species_frequency_df$Var1
+# List of unique eDNA species
+eDNA_species <- finalcleaned_eDNA_df$Species
+common_species <- intersect(eDNA_species, REEF_species)
+length(common_species)
+
+# Filter merged_reef_survey to include only common species
+merged_reef_survey_filtered <- merged_reef_survey %>%
+  filter(scientificname %in% common_species)
+
+# Create a presence/absence matrix
+presence_matrix <- merged_reef_survey_filtered %>%
+  distinct(Site_ID, scientificname) %>%
+  mutate(presence = 1) %>%
+  pivot_wider(names_from = scientificname, values_from = presence, values_fill = 0)
+
+# Join latitude and longitude to the presence_matrix based on Site_ID
+presence_matrix <- left_join(presence_matrix, merged_reef_survey_filtered %>% distinct(Site_ID, lat, lon), by = "Site_ID")
+
+# Reshape presence_matrix into long format for plotting
+presence_matrix_long <- presence_matrix %>%
+  pivot_longer(cols = -c(Site_ID, lat, lon), names_to = "Species", values_to = "Presence")
+
+# PEDS (eDNA)
+# Add lat and lon to eDNA file
+unique_merged_reef_survey <- merged_reef_survey %>% 
+  distinct(Site_ID, .keep_all = TRUE)
+
+# Perform the left join
+finalcleaned_eDNA_df <- left_join(finalcleaned_eDNA_df, 
+                                  unique_merged_reef_survey %>% 
+                                    select(Site_ID, lat, lon),
+                                  by = "Site_ID")
+
+# Filter merged_reef_survey to include only the common species
+eDNA_filtered <- finalcleaned_eDNA_df %>%
+  filter(Species %in% common_species)
+
+# Create a presence/absence matrix
+presence_matrix_eDNA <- eDNA_filtered %>%
+  distinct(Site_ID, Species) %>%
+  mutate(presence = 1) %>%
+  pivot_wider(names_from = Species, values_from = presence, values_fill = 0)
+
+# Join latitude and longitude to the presence_matrix based on Site_ID
+presence_matrix_eDNA <- left_join(presence_matrix_eDNA, eDNA_filtered %>% distinct(Site_ID, lat, lon), by = "Site_ID")
+
+# Reshape presence_matrix into long format for plotting
+presence_matrix_long_eDNA <- presence_matrix_eDNA %>%
+  pivot_longer(cols = -c(Site_ID, lat, lon), names_to = "Species", values_to = "Presence")
+
+# Calculate similarity metric as ratio
+similarity_metric <- presence_matrix_long %>%
+  inner_join(presence_matrix_long_eDNA, by = c("Site_ID", "Species")) %>%
+  mutate(agreement = ifelse(Presence.x == Presence.y, 1, 0)) %>%
+  group_by(Site_ID) %>%
+  summarise(similarity = sum(agreement) / n()) %>%
+  ungroup()
+
+# Merge with latitude and longitude information
+similarity_data <- inner_join(similarity_metric, presence_matrix, by = "Site_ID") %>%
+  select(Site_ID, lat, lon, similarity)
+
+# Plot maps
+ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") + 
+  coord_sf(xlim = c(-115, -107), ylim = c(24.2, 29.6), expand = FALSE) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity),
+             shape = 21, color = "black", size = 3, stroke = 0.8) +
+  scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
+  labs(title = "Species Similarity by Site",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+
+# Southern lat_group (24-25.6)
+ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") + 
+  coord_sf(xlim = c(-111, -109.5), ylim = c(24.2, 25.2), expand = FALSE) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity), 
+             shape = 21, color = "black", size = 3, stroke = 0.8) + 
+  scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
+  labs(title = "Similarity by Site, South",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+
+# Middle lat_group (25.7-27.9)
+ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") +
+  coord_sf(xlim = c(-112, -110.5), ylim = c(25.7, 26.7), expand = FALSE) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity), 
+             shape = 21, color = "black", size = 3, stroke = 0.8) +
+  scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
+  labs(title = "Similarity by Site, Middle",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+
+# Northern lat_group (28-30)
+ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") +
+  coord_sf(xlim = c(-114, -112), ylim = c(28.3, 29.6), expand = FALSE) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity), 
+             shape = 21, color = "black", size = 3, stroke = 0.8) +
+  scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
+  labs(title = "Similarity by Site, North",
+       x = "Longitude", y = "Latitude") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+```
+
+```{r Linear regression}
+library(broom)
+
+# Scatter plot of latitudes against similarity
+scatter_plot <- ggplot(similarity_data, aes(x = lat, y = similarity)) +
+  geom_point(aes(color = similarity), size = 3, alpha = 0.8) +
+  scale_color_distiller(name = "Species Overlap", palette = "PuRd", direction = 2) +
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed", size = 1.2) +
+  labs(title = "Latitude vs Species Overlap",
+       x = "Latitude", y = "Species Overlap (%)") +
+  ylim(0, max(similarity_data$similarity)) +
+  theme_minimal() + 
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 18),
+    axis.title = element_text(face = "bold", size = 16),
+    axis.text = element_text(size = 14, color = "black"),
+    legend.title = element_text(face = "bold", size = 14),
+    legend.text = element_text(size = 12)
+  )
+
+# Linear regression
+linear_model <- lm(similarity ~ lat, data = similarity_data)
+
+# Extracting regression coefficients and p-value
+regression_coefficients <- tidy(linear_model)
+slope <- regression_coefficients$estimate[2]
+p_value <- regression_coefficients$p.value[2]
+
+# R-squared value
+r_squared <- summary(linear_model)$r.squared 
+
+# Display scatter plot and regression line with annotations in bottom right
+scatter_plot + 
+  annotate("text", 
+           x = max(similarity_data$lat) - 0.5,
+           y = min(similarity_data$similarity) * (max(similarity_data$similarity) - min(similarity_data$similarity)),
+           label = paste("Slope:", round(slope, 3),
+                         "\nR²:", round(r_squared, 3),
+                         "\np-value:", signif(p_value, 3)),
+           size = 6, fontface = "bold", color = "black", hjust = 1, vjust = 0) 
+```
+
+```{r Venn diagrams}
+library(ggvenn)
+library(ggVennDiagram)
+library(eulerr)
+
+# From phyloseq objects
+tax_table_ps.prop.pruned.v2 <- tax_table(ps.prop.pruned.v2)
+species_column <- subset(tax_table_ps.prop.pruned.v2, select = "Species")
+species_column <- as.data.frame(species_column)
+unique_species <- unique(species_column, rownames = TRUE)
+rownames(unique_species) <- NULL
+unique_prop_species <- as.data.frame(unique_species[!is.na(unique_species)])
+colnames(unique_prop_species) <- "Species"
+
+# Bring back & filter REEF species
+REEF_species <- as.data.frame(REEF_species)
+filtered_REEF_species <- REEF_species %>%
+  filter(!(grepl("sp\\.", REEF_species, ignore.case = TRUE) | REEF_species == " " | REEF_species == "NULL"))
+colnames(filtered_REEF_species) <- "Species"
+
+# Common species
+common_species <- as.data.frame(intersect(unique_prop_species, filtered_REEF_species))
+
+# Prepare Species Data
+species_list <- list(
+  PEDS = unique_prop_species$Species,
+  RVS = as.character(filtered_REEF_species$Species)
+)
+
+# Compute Counts for Proportional Venn Diagram
+species_venn_counts <- euler(species_list)
+
+# Get Absolute Counts
+counts <- species_venn_counts$original.values
+total <- sum(counts)
+
+# Generate Labels with Counts & Percentages
+labels <- paste0(counts, "\n(", round((counts / total) * 100, 1), "%)")
+
+# Plot Proportional Venn Diagram
+venn_species <- plot(species_venn_counts,
+                     fills = c("seagreen3", "plum"),
+                     edges = "black",
+                     labels = list(col = "black", fontsize = 15),
+                     quantities = list(labels = labels, cex = 1.2))
+print(venn_species)
+
+# Make Families Venn
+prop_family <- subset(tax_table_ps.prop.pruned.v2, select = "Family")
+family_column <- as.data.frame(prop_family)
+
+# Prepare Families Data
+families_list <- list(
+  PEDS = unique(family_column$Family),
+  RVS = unique(merged_reef_survey$family_scientific)
+)
+
+# Compute Counts for Proportional Venn Diagram
+families_venn_counts <- euler(families_list)
+
+# Get Absolute Counts
+counts <- families_venn_counts$original.values
+total <- sum(counts)
+
+# Generate Labels with Counts & Percentages
+labels <- paste0(counts, "\n(", round((counts / total) * 100, 1), "%)")
+
+# Plot Proportional Venn Diagram
+venn_families <- plot(families_venn_counts,
+                      fills = c("seagreen3", "plum"),
+                      edges = "black",
+                      labels = list(col = "black", fontsize = 15),
+                      quantities = list(labels = labels, cex = 1.2))
+print(venn_families)
+```
+
+
+Zeta diversity by sample / survey
+```{r Redoing phyloseq setup}
+# Redoing Phyloseq Setup
+library(ggpmisc)
+library(metagMisc)
+library(ranacapa)
+library(patchwork)
+library(tidyr)
+
+varnames <- colnames(asvs_long)
+to_remove <- c("Sample_name", "Label", "Hash", "nReads")
+
+# Metadata
+metadata %>% as.data.frame() -> sampledata
+rownames(sampledata) <- sampledata$Sample
+sample_data(sampledata) -> sampledata
+
+# ASV Reads Processing
+c(setdiff(varnames, to_remove), "Tot") -> varnames_to_group
+asvs_long <- psmelt(ps.prop.pruned.v2)
+
+wide_PA <- asvs_long %>%
+  group_by(Sample) %>%
+  mutate(Tot = sum(Abundance)) %>%
+  tidyr::unite(sum.taxonomy, "Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species", sep = ";", remove = FALSE) %>%
+  group_by(Sample, sum.taxonomy) %>%
+  dplyr::summarise(nReads = sum(Abundance), Tot = first(Tot), .groups = 'drop') %>%
+  mutate(Prop.abund = nReads / Tot) %>%
+  group_by(sum.taxonomy) %>%
+  mutate(Colmax = max(Prop.abund),
+         eDNA.Index = Prop.abund / Colmax) %>%
+  dplyr::select(sum.taxonomy, Sample, eDNA.Index) %>%
+  mutate(eDNA.Index = replace_na(eDNA.Index, 0)) %>%
+  pivot_wider(names_from = Sample, values_from = eDNA.Index, values_fill = 0)
+
+wide_PA %>%
+  dplyr::select(sum.taxonomy) %>%
+  separate(sum.taxonomy, into = c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), sep = ";", remove = FALSE) %>%
+  dplyr::select(sum.taxonomy, Kingdom, Phylum, Class, Order, Family, Genus, Species) %>%
+  distinct() %>%
+  as.matrix() -> taxonomy_table
+
+rownames(taxonomy_table) <- wide_PA$sum.taxonomy
+
+TAX <- tax_table(taxonomy_table)
+
+wide_PA %>%
+  ungroup() %>%
+  dplyr::select(-sum.taxonomy) %>%
+  as.matrix() -> otu_table
+
+rownames(otu_table) <- wide_PA$sum.taxonomy
+OTU <- otu_table(otu_table, taxa_are_rows = TRUE)
+
+physeq_obj <- phyloseq(OTU, TAX, metadata)
+```
+
+```{r iNEXT}
+library(iNEXT)
+
+# Prepare REEF data
+reef_data <- merged_reef_survey %>%
+  group_by(Form, scientificname) %>%
+  summarize(Abundance = sum(Abundance, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = Form, values_from = Abundance, values_fill = 0) %>%
+  column_to_rownames(var = "scientificname")
+
+reef_otu <- as.matrix(reef_data)
+reef_otu_table <- otu_table(reef_otu, taxa_are_rows = TRUE)
+
+# Convert groups into vegan-compatible matrices
+veganComm_eDNA <- vegan_otu(physeq_obj)
+veganComm_REEF <- vegan_otu(reef_otu_table)
+
+# Create List for iNEXT Species Incidence Frequencies
+mor_inc <- list("eDNA" = t(veganComm_eDNA),
+                "REEF" = t(veganComm_REEF))
+
+species_incidence <- lapply(mor_inc, as.incfreq)
+
+# Convert to iNEXT format
+t <- seq(1, 300, by = 1)
+out.inc2 <- iNEXT(species_incidence, q = 0, datatype = "incidence_freq", size = t)
+
+# Extract species richness for REEF
+max_species_reef <- out.inc2$DataInfo %>%
+  filter(Assemblage == "REEF") %>%
+  pull(S.obs)
+
+# Extract rarefaction data for eDNA
+edna_curve <- out.inc2$iNextEst$size_based %>%
+  filter(Assemblage == "eDNA")
+
+# Find the closest number of eDNA samples needed to reach REEF richness
+edna_needed <- edna_curve %>%
+  arrange(abs(qD - max_species_reef)) %>%
+  slice(1)
+
+print(edna_needed$t)  # Approximate eDNA sample size needed
+
+```
+
+```{r Species accumulation figure}
+plot_spac <- ggiNEXT(out.inc2, type = 1, color.var = "Assemblage") +
+  theme_bw(base_size = 18) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"),
+    axis.text = element_text(size = 16),
+    axis.title = element_text(size = 20, face = "bold"),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 16)
+  ) +
+  xlab("Samples / Surveys") +
+  ylab("Taxa") +
+  scale_colour_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("PEDS", "RVS")
+  ) +
+  scale_shape_discrete(
+    name = "Group",
+    labels = c("PEDS", "RVS")
+  ) +
+  scale_fill_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("PEDS", "RVS")
+  )
+
+print(plot_spac)
+```
+
+```{r Zeta diversity}
+library(zetadiv)
+
+# Convert phyloseq to dataframe
+phyloseq_to_df(physeq_obj) %>%
+  dplyr::select(-Kingdom, -Phylum, -Class, -Order, -Family, -Genus, -Species, sum.taxonomy, -OTU) -> phyloseq_obj_df
+
+# Read in Read Data
+Data_asvs_sites <- phyloseq_obj_df %>% ungroup()
+
+# Get OTU names
+taxa_asvs_sites <- Data_asvs_sites$sum.taxonomy
+
+# Make a presence/absence matrix (Fix applied here)
+DataPA_asvs_sites <- Data_asvs_sites %>%
+  dplyr::select(-sum.taxonomy) %>%
+  mutate_all(~replace(., . > 0, 1))
+
+DataPA_asvs_sites <- as.data.frame(t(DataPA_asvs_sites))
+colnames(DataPA_asvs_sites) <- taxa_asvs_sites
+
+# Calculate zeta diversity decay parameters
+physeq_obj_zeta <- Zeta.decline.ex(DataPA_asvs_sites, orders = 1:20, plot = FALSE)
+```
+
+```{r REEF zeta diversity}
+#Read in Read Data
+Data_asvs_sites <- reef_data %>%  ungroup()
+
+#Get OTU names
+
+taxa_asvs_sites <- Data_asvs_sites$sum.taxonomy
+
+#Make a presence/absence matrix
+Data_asvs_sites %>% 
+mutate_all(., ~replace(., . > 1, 1)) -> DataPA_asvs_sites
+
+DataPA_asvs_sites <- as.data.frame(t(DataPA_asvs_sites))
+colnames(DataPA_asvs_sites) <- taxa_asvs_sites
+
+#Calculate zeta diversity decay parameters and plots.
+reef_data_zeta <- Zeta.decline.ex(DataPA_asvs_sites,orders=1:20,plot=FALSE)
+```
+
+```{r Zeta decay figure}
+physeq_obj_zeta[1:4] %>% as_tibble() %>% mutate(Group = "eDNA") -> eDNA_tib
+reef_data_zeta[1:4] %>% as_tibble() %>% mutate(Group = "REEF") -> REEF_tib
+
+bind_rows(eDNA_tib, REEF_tib) -> zdx_regions
+
+zdv_decay <- zdx_regions %>%
+ggplot(aes(x= zeta.order, y= zeta.val, group=Group,color=Group, fill=Group)) +geom_point() +geom_line() + geom_ribbon(aes(ymin = zeta.val - zeta.val.sd, ymax = zeta.val + zeta.val.sd),alpha =0.1, colour = NA) + ggtitle(label="")+theme(axis.line = element_line(colour = "black"),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.text=element_text(size=16),
+        axis.title=element_text(size=20,face="bold"),legend.position="right",legend.title = element_text( size=12, face="bold"),legend.text = element_text(size=10,
+                                     face="bold"), title = element_text(size=20, face="bold") ) + theme(legend.text=element_text(size=16), legend.title=element_text(size=20)) +ylab("Zeta Diversity") + xlab("Zeta Order") + scale_x_continuous(breaks=seq(1, 10, 1), limits=c(1,10))+ scale_colour_manual(values = c("seagreen3","plum"), name = "Group", labels = c("PEDS", "RVS")) + scale_shape_discrete(name = "Group", labels = c("PEDS", "RVS")) + scale_fill_manual(values = c("seagreen3","plum"),name = "Group", labels = c("PEDS", "RVS"))
+
+zdv_decay
+```
+
+```{r Species retention figure}
+# Extract species retention ratio from Zeta diversity results
+eDNA_multi <- tibble(
+  zeta.order = seq_along(physeq_obj_zeta[[5]]),  # Correct extraction from list
+  ratio = physeq_obj_zeta[[5]],  # Assign extracted numeric values
+  Group = "eDNA"
+)
+
+REEF_multi <- tibble(
+  zeta.order = seq_along(reef_data_zeta[[5]]),  # Correct extraction from list
+  ratio = reef_data_zeta[[5]],  # Assign extracted numeric values
+  Group = "REEF"
+)
+
+# Combine data for plotting
+zdx_regions_ret <- bind_rows(eDNA_multi, REEF_multi)
+
+# Plot species retention figure
+spec_ret <- zdx_regions_ret %>%
+  ggplot(aes(x = zeta.order, y = ratio, group = Group, color = Group)) +
+  geom_point() +
+  geom_line() +
+  theme_minimal(base_size = 18) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"),
+    axis.text = element_text(size = 16),
+    axis.title = element_text(size = 20, face = "bold"),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 16)
+  ) +
+  labs(y = "Zeta Ratio", x = "Zeta Order") +
+  scale_y_continuous(limits = c(0, 1)) +
+  scale_x_continuous(limits = c(1, 20)) +  # Ensuring x-axis limits are clear
+  scale_color_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("PEDS", "RVS")
+  ) +
+  scale_fill_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("PEDS", "RVS")
+  )
+
+print(spec_ret)
+```
+
+
+Zeta diversity by site
+```{r Phyloseq setup site}
+varnames <- colnames(asvs_long)
+to_remove <- c("Sample_name", "Label", "Hash", "nReads")
+
+# Metadata
+metadata %>% as.data.frame() -> sampledata
+rownames(sampledata) <- sampledata$Sample
+sample_data(sampledata) -> sampledata
+
+# ASV Reads Processing
+c(setdiff(varnames, to_remove), "Tot") -> varnames_to_group
+asvs_long <- psmelt(ps.prop.pruned.v2)
+
+# Aggregate by Site_ID
+wide_PA <- asvs_long %>%
+  group_by(Site_ID) %>%
+  mutate(Tot = sum(Abundance)) %>%
+  tidyr::unite(sum.taxonomy, "Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species", sep   = ";", remove = FALSE) %>%
+  group_by(Site_ID, sum.taxonomy) %>%
+  dplyr::summarise(nReads = sum(Abundance), Tot = sum(Tot), .groups = 'drop') %>%
+  mutate(Prop.abund = nReads / Tot) %>%
+  group_by(sum.taxonomy) %>%
+  mutate(Colmax = max(Prop.abund),
+         eDNA.Index = Prop.abund / Colmax) %>%
+  dplyr::select(sum.taxonomy, Site_ID, eDNA.Index) %>%
+  mutate(eDNA.Index = replace_na(eDNA.Index, 0)) %>%
+  pivot_wider(names_from = Site_ID, values_from = eDNA.Index, values_fill = 0)
+
+# Ensure Site_ID is a valid column name before pivot_wider()
+colnames(wide_PA) <- make.names(colnames(wide_PA))
+
+# Convert to taxonomy table for phyloseq
+wide_PA %>%
+  dplyr::select(sum.taxonomy) %>%
+  separate(sum.taxonomy, into = c("Kingdom", "Phylum", "Class", "Order", "Family", "Genus", "Species"), sep = ";", remove = FALSE) %>%
+  dplyr::select(sum.taxonomy, Kingdom, Phylum, Class, Order, Family, Genus, Species) %>%
+  distinct() %>%
+  as.matrix() -> taxonomy_table
+
+rownames(taxonomy_table) <- wide_PA$sum.taxonomy
+TAX <- tax_table(taxonomy_table)
+
+# Convert to OTU table
+wide_PA %>%
+  ungroup() %>%
+  dplyr::select(-sum.taxonomy) %>%
+  as.matrix() -> otu_table
+
+rownames(otu_table) <- wide_PA$sum.taxonomy
+OTU <- otu_table(otu_table, taxa_are_rows = TRUE)
+
+# Create phyloseq object
+physeq_obj <- phyloseq(OTU, TAX, metadata)
+```
+
+```{r iNEXT site}
+library(iNEXT)
+
+# Prepare REEF data - Aggregate by Site_ID
+reef_data <- merged_reef_survey %>%
+  group_by(Site_ID, scientificname) %>%
+  summarise(Abundance = sum(Abundance, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = Site_ID, values_from = Abundance, values_fill = 0) %>%
+  column_to_rownames(var = "scientificname")
+
+# Make sure Site_ID is valid name before pivoting
+colnames(reef_data) <- make.names(colnames(reef_data))
+
+reef_otu <- as.matrix(reef_data)
+reef_otu_table <- otu_table(reef_otu, taxa_are_rows = TRUE)
+
+# Convert groups into vegan-compatible matrices
+veganComm_eDNA <- vegan_otu(physeq_obj)
+veganComm_REEF <- vegan_otu(reef_otu_table)
+
+# Create List for iNEXT Species Incidence Frequencies
+mor_inc <- list("eDNA" = t(veganComm_eDNA),
+                "REEF" = t(veganComm_REEF))
+
+species_incidence <- lapply(mor_inc, as.incfreq)
+
+# Convert to iNEXT format
+t <- seq(1, 300, by = 1)
+out.inc2 <- iNEXT(species_incidence, q = 0, datatype = "incidence_freq", size = t)
+
+# Extract species richness for REEF
+max_species_reef <- out.inc2$DataInfo %>%
+  filter(Assemblage == "REEF") %>%
+  pull(S.obs)
+
+# Extract rarefaction data for eDNA
+edna_curve <- out.inc2$iNextEst$size_based %>%
+  filter(Assemblage == "eDNA")
+
+# Find the closest number of eDNA samples needed to reach REEF richness
+edna_needed <- edna_curve %>%
+  arrange(abs(qD - max_species_reef)) %>%
+  slice(1)
+
+print(edna_needed$t)  # Approximate eDNA sample size needed
+```
+
+```{r Species accumulation figure site}
+plot_spac_site <- ggiNEXT(out.inc2, type = 1, color.var = "Assemblage") +
+  theme_bw(base_size = 18) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"),
+    axis.text = element_text(size = 16),
+    axis.title = element_text(size = 20, face = "bold"),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 16)
+  ) +
+  xlab("Sites") +
+  ylab("Taxa") +
+  scale_colour_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("eDNA", "REEF")
+  ) +
+  scale_shape_discrete(
+    name = "Group",
+    labels = c("eDNA", "REEF")
+  ) +
+  scale_fill_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("eDNA", "REEF")
+  )
+
+print(plot_spac_site)
+```
+
+```{r Zeta diversity site}
+# Ensure sample names are syntactically valid before using phyloseq_to_df
+sample_names(physeq_obj) <- make.names(sample_names(physeq_obj))
+
+# Convert phyloseq object to a dataframe
+phyloseq_to_df(physeq_obj) %>%
+  dplyr::select(-Kingdom, -Phylum, -Class, -Order, -Family, -Genus, -Species, sum.taxonomy, -OTU) -> phyloseq_obj_df
+
+# Read in Read Data
+Data_asvs_sites <- phyloseq_obj_df %>% ungroup()
+
+# Get OTU names
+taxa_asvs_sites <- Data_asvs_sites$sum.taxonomy
+
+# Make a presence/absence matrix (Fix applied here)
+DataPA_asvs_sites <- Data_asvs_sites %>%
+  dplyr::select(-sum.taxonomy) %>%
+  mutate_all(~replace(., . > 0, 1))
+
+DataPA_asvs_sites <- as.data.frame(t(DataPA_asvs_sites))
+colnames(DataPA_asvs_sites) <- taxa_asvs_sites
+
+# Calculate zeta diversity decay parameters
+physeq_obj_zeta <- Zeta.decline.ex(DataPA_asvs_sites, orders = 1:20, plot = FALSE)
+```
+
+```{r REEF zeta site}
+#Read in Read Data
+Data_asvs_sites <- reef_data %>%  ungroup()
+
+#Get OTU names
+taxa_asvs_sites <- Data_asvs_sites$sum.taxonomy
+
+#Make a presence/absence matrix
+Data_asvs_sites %>% 
+mutate_all(., ~replace(., . > 1, 1)) -> DataPA_asvs_sites
+
+DataPA_asvs_sites <- as.data.frame(t(DataPA_asvs_sites))
+colnames(DataPA_asvs_sites) <- taxa_asvs_sites
+
+#Calculate zeta diversity decay parameters and plots.
+reef_data_zeta <- Zeta.decline.ex(DataPA_asvs_sites,orders=1:20,plot=FALSE)
+```
+
+```{r Zeta decay figure site}
+physeq_obj_zeta[1:4] %>% as_tibble() %>% mutate(Group = "eDNA") -> eDNA_tib
+reef_data_zeta[1:4] %>% as_tibble() %>% mutate(Group = "REEF") -> REEF_tib
+
+bind_rows(eDNA_tib, REEF_tib) -> zdx_regions
+
+zdv_decay_sites <- zdx_regions %>%
+ggplot(aes(x= zeta.order, y= zeta.val, group=Group,color=Group, fill=Group)) +geom_point() +geom_line() + geom_ribbon(aes(ymin = zeta.val - zeta.val.sd, ymax = zeta.val + zeta.val.sd),alpha =0.1, colour = NA) + ggtitle(label="")+theme(axis.line = element_line(colour = "black"),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),panel.background = element_blank(), axis.text=element_text(size=16),
+        axis.title=element_text(size=20,face="bold"),legend.title = element_text( size=12, face="bold"),legend.text = element_text(size=10,
+                                     face="bold"), title = element_text(size=20, face="bold") ) + theme(legend.text=element_text(size=16), legend.title=element_text(size=20)) +ylab("Zeta Diversity") + xlab("Zeta Order") + scale_x_continuous(breaks=seq(1, 10, 1), limits=c(1,10))+ scale_colour_manual(values = c("seagreen3","plum"), name = "Group", labels = c("PEDS", "RVS")) + scale_shape_discrete(name = "Group", labels = c("PEDS", "RVS")) + scale_fill_manual(values = c("seagreen3","plum"),name = "Group", labels = c("PEDS", "RVS"))
+
+zdv_decay_sites
+```
+
+```{r Species retention figure site}
+# Extract species retention ratio from Zeta diversity results
+eDNA_multi <- tibble(
+  zeta.order = seq_along(physeq_obj_zeta[[5]]),
+  ratio = physeq_obj_zeta[[5]],
+  Group = "eDNA"
+)
+
+REEF_multi <- tibble(
+  zeta.order = seq_along(reef_data_zeta[[5]]),
+  ratio = reef_data_zeta[[5]],
+  Group = "REEF"
+)
+
+# Combine data for plotting
+zdx_regions_ret_sites <- bind_rows(eDNA_multi, REEF_multi)
+
+# Plot species retention figure
+spec_ret_sites <- zdx_regions_ret_sites %>%
+  ggplot(aes(x = zeta.order, y = ratio, group = Group, color = Group)) +
+  geom_point() +
+  geom_line() +
+  theme_minimal(base_size = 18) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    axis.line = element_line(colour = "black"),
+    axis.text = element_text(size = 16),
+    axis.title = element_text(size = 20, face = "bold"),
+    legend.title = element_text(size = 20),
+    legend.text = element_text(size = 16)
+  ) +
+  labs(y = "Zeta Ratio", x = "Zeta Order") +
+  scale_y_continuous(limits = c(0, 1)) +
+  scale_x_continuous(limits = c(1, 20)) +  
+  scale_color_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("eDNA", "REEF")
+  ) +
+  scale_fill_manual(
+    values = c("seagreen3", "plum"),
+    name = "Group",
+    labels = c("eDNA", "REEF")
+  )
+
+# Display the plot
+print(spec_ret_sites)
+```
+
+
