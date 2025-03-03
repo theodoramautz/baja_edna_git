@@ -21,6 +21,7 @@ code/reef_data_cleaning.R
 code/theodora_phyloseq_newseqs.Rmd
 
 # Data
+data/reef_data/Bajageog Google maps.csv
 data/baja_raw_sequences
 data/README
 data/figures

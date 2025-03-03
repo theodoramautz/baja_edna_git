@@ -2,16 +2,23 @@
 Baja eDNA project git repository for code. 
 
 In the code folder:
-"baja_data_cleaning.R" "reef_data_cleaning.R" "baja_metadata.R" and "baja_analysis.R" were early analysis attempts and mostly go through some preliminary data cleaning steps. "baja_metadata.R" is for metadata used in QIIME2 bioinformatics workflow and "baja_analysis.R" has the metadata used for later analyses. Run those first to create the .RData files referenced in "theodora_phyloseq_newseqs.Rmd"
-"dada2_tutorial-v3-Baja.Rmd" is the code to run all the bioinformatics.
-"theodora_phyloseq_newseqs.Rmd" is the main coding file with all analyses used in the paper.
+There are 2 folders. "mifish" has the code for analyses using MiFish primers. "dloop" has the code for analyses using D-loop primers.
+In "mifish":
+"peds_data_cleaning.R" and "rvs_data_cleaning.R" should be run first. These cleaned data prior to analyses.
+"metadata_creation.R" should be run next to create the metadata file.
+"mifish_bioinformatics.Rmd" is the code to run all the bioinformatics.
+"mifish_analysis.Rmd" contains all analyses used in the paper for MiFish primers. This should be run after all other code files are run because it uses cleaned / processed data created from the others.
 
 In the data folder:
-"baja_edna_metadata.csv" is the metadata file.
-"eDNA_data" folder has:
+"baja_edna_metadata.csv" is the cleaned metadata file.
+
+"edna_data" folder has:
 "Bajalib_nextera_ud_indexes.xlsx - Baja library index.csv" which connects "sample" to "Seq_ID" which is how the sequencer identified each sample.
-"diver_number_key.xlsx" helps associate a diver number with a diver name for divers who carried PEDS on their dives.
-"eDNA Explore Baja REEF 2022 - All Data.csv" has metadata for the PEDS.
+"eDNA Explore Baja REEF 2022 - All Data.csv" is the original metadata file for the PEDS.
+"MiFish" folder has:
+All processed data from the bioinformatics workflow found in "mifish_bioinformatics.Rmd" from the code folder.
+"dloop" folder has:
+All processed data from the bioinformatics workflow found in "Baja_dloop_dada2.R" from the code folder.
 
 "reef_data" folder has:
 "ExploreBaja22.csv" which is all raw RVS data.
@@ -19,6 +26,3 @@ Feel free to read the "readme.txt" file in that folder for further info on other
 
 "reference_databases" folder has:
 "12S_efc_derep_and_clean-Baja-v3.fa" - the final reference database used to assign taxonomy.
-
-"rerun_bioinformatics_newseqs" folder has:
-All files for phyloseq analysis from final bioinformatics analyses (with updated reference database after adding fish tissue sequences).
