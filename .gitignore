@@ -21,6 +21,9 @@ code/reef_data_cleaning.R
 code/theodora_phyloseq_newseqs.Rmd
 
 # Data
+data/edna_data/MiFish/Baja_MiFish_ASVs_wide_v4.csv
+data/edna_data/MiFish/Baja_MiFish_ASVs_v4_wide.csv
+data/reference_databases/NCBI_Submission
 data/reef_data/Bajageog Google maps.csv
 data/baja_raw_sequences
 data/README
