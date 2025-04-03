@@ -12,12 +12,13 @@ library(tidyverse)
 library(here)
 library(dplyr)
 library(vegan)
+library(cowplot)
 theme_set(theme_bw())
 ```
 
 ```{r phyloseq preprocessing}
 # Import output files from DADA2. Adjust folder and file names as necessary for your data
-asvs_long <- read.csv(here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_ASVs_v4.csv"))
+asvs_long <- read.csv(here("data", "edna_data", "MiFish", "Baja_MiFish_ASVs_v4.csv"))
 
 # To match our other data files, we appended "BAJA_" prefix to each sample name
 asvs_long <- asvs_long %>%
@@ -33,8 +34,8 @@ asvs <- asvs %>%
   column_to_rownames(var = "Hash")
 
 # For added sequences. Adjust folder and file names as necessary for your data
-tax <- read.csv(here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_taxa_table_newseqs_v4.csv"))
-hash <- read.csv(here("data", "sequencing_data", "rerun_bioinformatics_newseqs","Baja_MiFish_hash_key_v4.csv"))
+tax <- read.csv(here("data", "edna_data", "MiFish", "Baja_MiFish_taxa_table_newseqs_v4.csv"))
+hash <- read.csv(here("data", "edna_data", "MiFish","Baja_MiFish_hash_key_v4.csv"))
 
 # We renamed column X to Sequence to merge by sequence later
 names(tax)[1] <- "Sequence"
@@ -991,7 +992,7 @@ mor_inc <- list("eDNA" = t(veganComm_eDNA),
 species_incidence <- lapply(mor_inc, as.incfreq)
 
 # Convert to iNEXT format
-t <- seq(1, 300, by = 1)
+t <- seq(1, 10000, by = 1)
 out.inc2 <- iNEXT(species_incidence, q = 0, datatype = "incidence_freq", size = t)
 
 # Extract species richness for REEF
