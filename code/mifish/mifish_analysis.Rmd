@@ -13,6 +13,10 @@ library(here)
 library(dplyr)
 library(vegan)
 library(cowplot)
+library(RColorBrewer)
+library(viridis)
+library(colorspace)
+library(scales)
 theme_set(theme_bw())
 ```
 
@@ -267,69 +271,72 @@ sample_data(ps.hell.pruned.v2)$sample.id <- sample_data(ps.prop.pruned.v2)$sampl
 
 ```{r phyloseq NMDS hell}
 # Plot beta diversity in NMDS
-
 # Generate the ordinations using Euclidean distance metric (because of Hellinger transformation)
 ord.nmds.bray <- ordinate(ps.hell.pruned.v2, "NMDS", "euclidean")
 
 # Plot
 # Latitude Group
-p1 <- plot_ordination(ps.hell.pruned.v2, 
-                      ord.nmds.bray, 
-                      color="lat_group", 
-                      title="Lat Group") +
-                      #label="sample.id") +
-  scale_color_discrete(name = "Lat Group", labels = c("South", "Middle", "North")) +
-  #theme_minimal() +
+p1 <- plot_ordination(ps.hell.pruned.v2, ord.nmds.bray, color = "lat_group") +
+  scale_color_manual(
+    name   = "Latitude Group",
+    values = c(
+      "24-25.6"   = "blue",   # South
+      "25.7-27.9" = "black",   # Middle
+      "28-30"     = "red"     # North
+    ),
+    breaks = c("24-25.6", "25.7-27.9", "28-30"),
+    labels = c("North", "Middle", "South")
+  ) +
   theme(plot.title = element_text(hjust = 0.5))
 p1
 
 # Max Depth
-p2 <- plot_ordination(ps.hell.pruned.v2, 
-                      ord.nmds.bray, 
-                      color="MaxDepth", 
-                      title="Max Depth") +
-  #theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5)) +
-  labs(color = "Max Depth (m)")
+p2 <- plot_ordination(ps.hell.pruned.v2, ord.nmds.bray, color = "MaxDepth") +
+  scale_color_distiller(
+    palette = "YlGnBu", 
+    direction = 1, 
+    name = "Max Depth (m)"
+    ) +
+  theme(
+    plot.title = element_text(hjust = 0.5)
+    )
 p2
 
 # Diver
-p3 <- plot_ordination(ps.hell.pruned.v2, 
-                      ord.nmds.bray, 
-                      color="Diver", 
-                      title="Diver") +
-  theme(plot.title = element_text(hjust = 0.5)) +
-  labs(color = "Diver")
-
+p3 <- plot_ordination(ps.hell.pruned.v2, ord.nmds.bray, color="Diver") +
+  theme(
+    plot.title = element_text(hjust = 0.5)
+    ) +
+  labs(
+    color = "Diver"
+    )
 p3
 
 # Bottom Time
-p4 <- plot_ordination(ps.hell.pruned.v2, 
-                      ord.nmds.bray, 
-                      color="BottomExposureTime_minutes", 
-                      title="Bottom Time") +
-  #theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5)) +
-  labs(color = "Bottom Time (mins)")
+p4 <- plot_ordination(ps.hell.pruned.v2, ord.nmds.bray, color = "BottomExposureTime_minutes") +
+  scale_color_viridis_c(
+    option = "C", 
+    direction = -1, 
+    name = "Bottom Time (mins)"
+    ) +
+  theme(
+    plot.title = element_text(hjust = 0.5)
+    )
 p4
 
-#Plot all together on one graph
-# Define a fixed width for legends
-fixed_legend_width <- 1.2  # Adjust to desired width
+# Combine all plots
+fixed_legend_width <- 1.2
+p_list <- list(p1, p2, p3, p4)
+p_list <- lapply(p_list, function(p) {
+  p + theme(
+    legend.position = "right",
+    legend.key.width = unit(fixed_legend_width, "cm"),
+    plot.margin = unit(c(1, 1, 1, 1), "lines")
+  )
+})
 
-# Apply consistent legend width and margins for each plot
-p1 <- p1 + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
-                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
-p2 <- p2 + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
-                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
-p3 <- p3 + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
-                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
-p4 <- p4 + theme(legend.position = "right", legend.key.width = unit(fixed_legend_width, "cm"),
-                 plot.margin = unit(c(1, 1, 1, 1), "lines"))
-
-# Arrange plots in a grid
-plot_grid(p1, p2, p3, p4, 
-          ncol = 2, align = "hv", axis = "tblr")  # Align horizontally and vertically
+combined_beta_nmds <- plot_grid(plotlist = p_list, ncol = 2, align = "hv", axis = "tblr")
+combined_beta_nmds
 ```
 
 Running statistics on beta diversity
@@ -442,42 +449,60 @@ nmds_df <- data.frame(NMDS1 = nmds_coords[,1], NMDS2 = nmds_coords[,2],
                       Diver = as.factor(merged_reef_survey1$MemberID),
                       Time = merged_reef_survey1$BTime)
 
-# Create individual plots with consistent themes and compact legends
+# Recode lat group numbers to names
+nmds_df <- nmds_df %>%
+  mutate(
+    lat_group = recode(
+      lat_group,
+      "24-25.6"   = "South",
+      "25.7-27.9" = "Middle",
+      "28-30"     = "North",))
 
 # Plot for Lat Group
 p1 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = lat_group)) +
   geom_point() +
-  labs(title = "Lat Group") +
-  scale_color_discrete(name = "Lat Group", labels = c("South", "Middle", "North")) +
-  theme(plot.title = element_text(hjust = 0.5),
-        legend.position = "right")
+  scale_color_manual(
+    name = "Latitude Group",
+    values = c(
+      "North"  = "red",
+      "Middle" = "black",
+      "South"  = "blue"),
+    breaks = c("North", "Middle", "South")) +
+  theme(
+    legend.position = "right")
 
 # Plot for MaxDepth
 p2 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = MaxDepth)) +
   geom_point() +
-  labs(title = "Max Depth") +
-  theme(plot.title = element_text(hjust = 0.5),
-        legend.position = "right") +
-  labs(color = "Max Depth (m)")
+  labs(
+    color = "Max Depth (m)") +
+  scale_color_distiller(
+    palette = "YlGnBu", direction = 1) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "right")
 
 # Plot for Diver
-p3 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = Diver)) +
-  geom_point() +
-  labs(title = "Diver") +
-  theme(plot.title = element_text(hjust = 0.5),
-        legend.position = "right",
-        legend.key.size = unit(0.4, "cm"),
-        legend.text = element_text(size = 8),
-        legend.spacing.y = unit(0.1, "cm")) +
+p3 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = Diver)) + 
+  geom_point() + 
+  theme(
+    plot.title = element_text(hjust = 0.5), 
+    legend.position = "right", 
+    legend.key.size = unit(0.4, "cm"), 
+    legend.text = element_text(size = 8), 
+    legend.spacing.y = unit(0.1, "cm")) + 
   guides(color = guide_legend(ncol = 2))
 
 # Plot for Bottom Time
 p4 <- ggplot(nmds_df, aes(x = NMDS1, y = NMDS2, color = Time)) +
   geom_point() +
-  labs(title = "Bottom Time") +
-  theme(plot.title = element_text(hjust = 0.5),
-        legend.position = "right") +
-  labs(color = "Bottom Time (mins)")
+  labs(color = "Bottom Time (mins)") +
+  scale_color_viridis_c(
+    option = "C",
+    direction = -1) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "right")
 
 # Define the fixed legend width and apply consistent styling to all plots
 fixed_legend_width <- 1.2
@@ -488,7 +513,7 @@ p_list <- lapply(p_list, function(p) {
 })
 
 # Arrange all plots in a grid
-plot_grid(plotlist = p_list, ncol = 2, align = "hv", axis = "tblr")
+combined_nmds <- plot_grid(plotlist = p_list, ncol = 2, align = "hv", axis = "tblr")
 ```
 
 ```{r REEF permanova}
@@ -667,9 +692,148 @@ ggplot() +
   theme(panel.background = element_rect(fill = "lightblue", color = NA))
 ```
 
-```{r Presence/absence heatmaps}
-library(RColorBrewer)
+```{r Maps with more regional inserts}
+library(ggspatial)   # for scale bar + north arrow
+library(patchwork)   # for multi-panel layout
 
+# Load libraries from cleaned data (see baja_data_cleaning.R and reef_data_cleaning.R for more information on how data were cleaned)
+load(here("data", "baja_data_cleaning.RData"))
+load(here("data", "reef_data_cleaning.RData"))
+baja_metadata <- read.csv(here("data", "baja_edna_metadata.csv"))
+
+# Get world map data
+world <- ne_countries(scale = "large", returnclass = "sf")
+
+# Use unique sites for plotting + labeling (avoids duplicate points/labels)
+baja_sites <- baja_metadata %>%
+  distinct(Site_ID, lat, lon)
+
+# Common theme
+map_theme <- theme_minimal(base_size = 12) +
+  theme(
+    panel.background = element_rect(fill = "lightblue", color = NA),
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text  = element_text(size = 10)
+  )
+
+# Helper function to build a labeled inset map
+make_map <- function(df, xlim, ylim, title = NULL,
+                     point_size = 3,
+                     label_size = 4,
+                     repel_force = 1.2) {
+
+  ggplot() +
+    geom_sf(data = world, fill = "gray", color = "black", linewidth = 0.25) +
+    coord_sf(xlim = xlim, ylim = ylim, expand = FALSE) +
+    geom_point(
+      data = df,
+      aes(x = lon, y = lat),
+      shape = 21, fill = "seagreen3", color = "black",
+      size = point_size, stroke = 0.5
+    ) +
+    geom_text_repel(
+      data = df,
+      aes(x = lon, y = lat, label = Site_ID),
+      size = label_size,
+      segment.size = 0.25,
+      force = repel_force,
+      min.segment.length = 0,
+      box.padding = 0.35,
+      point.padding = 0.25,
+      max.overlaps = Inf
+    ) +
+    scale_x_continuous(breaks = seq(xlim[1], xlim[2], by = 0.2)) +
+    annotation_scale(location = "bl", width_hint = 0.25, text_cex = 0.9) +
+    labs(title = title, x = "Longitude", y = "Latitude") +
+    map_theme
+}
+
+# ----------------
+# 1) Main Gulf map
+# ----------------
+main_map <- ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black", linewidth = 0.25) +
+  coord_sf(xlim = c(-118, -105), ylim = c(22, 33), expand = FALSE) +
+  geom_point(
+    data = baja_sites,
+    aes(x = lon, y = lat),
+    shape = 21, fill = "seagreen3", color = "black",
+    size = 2.2, stroke = 0.5
+  ) +
+  annotation_scale(location = "bl", width_hint = 0.25, text_cex = 0.9) +
+  labs(x = "Longitude", y = "Latitude") +
+  map_theme
+print(main_map)
+# --------------------------------
+# 2) Southern lat_group (24–25.6)
+# --------------------------------
+southern_map_a <- make_map(
+  df = baja_sites,
+  xlim = c(-110.5, -109.9),
+  ylim = c(24.3, 24.7),
+  point_size = 3.2,
+  label_size = 4,
+  repel_force = 1.3
+)
+print(southern_map_a)
+
+southern_map_b <- make_map(
+  df = baja_sites,
+  xlim = c(-110.8, -110.4),
+  ylim = c(24.8, 25.2),
+  point_size = 3.2,
+  label_size = 4,
+  repel_force = 1.3
+)
+print(southern_map_b)
+# --------------------------------
+# 3) Middle lat_group (25.7–27.9)
+# --------------------------------
+middle_map_a <- make_map(
+  df = baja_sites,
+  xlim = c(-111.6, -111.0),
+  ylim = c(25.7, 26.2),
+  point_size = 3.2,
+  label_size = 4,
+  repel_force = 1.2
+)
+print(middle_map_a)
+
+middle_map_b <- make_map(
+  df = baja_sites,
+  xlim = c(-111.8, -111.2),
+  ylim = c(26.4, 26.9),
+  point_size = 3.2,
+  label_size = 4,
+  repel_force = 1.2
+)
+print(middle_map_b)
+# -----------------------------
+# 4) Northern lat_group (28–30)
+# -----------------------------
+northern_map_a <- make_map(
+  df = baja_sites,
+  xlim = c(-113.0, -112.2),
+  ylim = c(28.3, 29.0),
+  point_size = 3.2,
+  label_size = 4,
+  repel_force = 1.4
+)
+print(northern_map_a)
+
+northern_map_b <- make_map(
+  df = baja_sites,
+  xlim = c(-113.8, -113.0),
+  ylim = c(28.9, 29.6),
+  point_size = 3.2,
+  label_size = 4,
+  repel_force = 1.4
+)
+print(northern_map_b)
+```
+
+```{r Presence/absence heatmaps}
 # RVS
 # Make a frequency table for abundance of species sightings in REEF surveys 
 frequency_table <- table(merged_reef_survey$scientificname)
@@ -740,56 +904,144 @@ similarity_data <- inner_join(similarity_metric, presence_matrix, by = "Site_ID"
   select(Site_ID, lat, lon, similarity)
 
 # Plot maps
-ggplot() +
+heat <- ggplot() +
   geom_sf(data = world, fill = "gray", color = "black") + 
-  coord_sf(xlim = c(-115, -107), ylim = c(24.2, 29.6), expand = FALSE) +
+  coord_sf(xlim = c(-115, -107), ylim = c(24.2, 29.8), expand = FALSE) +
   geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity),
              shape = 21, color = "black", size = 3, stroke = 0.8) +
   scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
-  labs(title = "Species Similarity by Site",
-       x = "Longitude", y = "Latitude") +
+  annotation_scale(location = "bl", width_hint = 0.25, text_cex = 0.9) +
+  labs(x = "Longitude", y = "Latitude") +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) + 
   theme(panel.background = element_rect(fill = "lightblue", color = NA))
 
 # Southern lat_group (24-25.6)
-ggplot() +
+south_heat <- ggplot() +
   geom_sf(data = world, fill = "gray", color = "black") + 
   coord_sf(xlim = c(-111, -109.5), ylim = c(24.2, 25.2), expand = FALSE) +
   geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity), 
              shape = 21, color = "black", size = 3, stroke = 0.8) + 
   scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
-  labs(title = "Similarity by Site, South",
-       x = "Longitude", y = "Latitude") +
+  annotation_scale(location = "bl", width_hint = 0.25, text_cex = 0.9) +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) + 
   theme(panel.background = element_rect(fill = "lightblue", color = NA))
+south_heat
+
+south_heat_a <- ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") + 
+  coord_sf(xlim = c(-110.5, -109.9), ylim = c(24.3, 24.7), expand = FALSE) +
+  scale_x_continuous(breaks = seq(-110.5, -109.9, by = 0.2)) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity), 
+             shape = 21, color = "black", size = 3, stroke = 0.8) + 
+  scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
+  annotation_scale(location = "bl", width_hint = 0.25, text_cex = 0.9) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+south_heat_a
+
+south_heat_b <- ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") + 
+  coord_sf(xlim = c(-110.8, -110.4), ylim = c(24.8, 25.2), expand = FALSE) +
+  scale_x_continuous(breaks = seq(-110.8, -110.4, by = 0.2)) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity), 
+             shape = 21, color = "black", size = 3, stroke = 0.8) + 
+  scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
+  annotation_scale(location = "bl", width_hint = 0.25, text_cex = 0.9) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+south_heat_b
 
 # Middle lat_group (25.7-27.9)
-ggplot() +
+middle_heat <- ggplot() +
   geom_sf(data = world, fill = "gray", color = "black") +
   coord_sf(xlim = c(-112, -110.5), ylim = c(25.7, 26.7), expand = FALSE) +
+  scale_x_continuous(breaks = seq(-112, -110.5, by = 0.2)) +
   geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity), 
              shape = 21, color = "black", size = 3, stroke = 0.8) +
   scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
-  labs(title = "Similarity by Site, Middle",
-       x = "Longitude", y = "Latitude") +
+  annotation_scale(location = "bl", width_hint = 0.25, text_cex = 0.9) +
+  labs(x = NULL, y = NULL) +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) + 
   theme(panel.background = element_rect(fill = "lightblue", color = NA))
+middle_heat
+
+middle_heat_a <- ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") +
+  coord_sf(xlim = c(-111.6, -111.0), ylim = c(25.7, 26.2), expand = FALSE) +
+  scale_x_continuous(breaks = seq(-111.6, -111.0, by = 0.2)) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity), 
+             shape = 21, color = "black", size = 3, stroke = 0.8) +
+  scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
+  annotation_scale(location = "bl", width_hint = 0.25, text_cex = 0.9) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+middle_heat_a
+
+middle_heat_b <- ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") +
+  coord_sf(xlim = c(-111.8, -111.2), ylim = c(26.4, 26.9), expand = FALSE) +
+  scale_x_continuous(breaks = seq(-111.8, -111.2, by = 0.2)) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity), 
+             shape = 21, color = "black", size = 3, stroke = 0.8) +
+  scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
+  annotation_scale(location = "bl", width_hint = 0.25, text_cex = 0.9) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+middle_heat_b
 
 # Northern lat_group (28-30)
-ggplot() +
+northern_heat <- ggplot() +
   geom_sf(data = world, fill = "gray", color = "black") +
   coord_sf(xlim = c(-114, -112), ylim = c(28.3, 29.6), expand = FALSE) +
+  scale_x_continuous(breaks = seq(-114, -112, by = 0.2)) +
   geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity), 
              shape = 21, color = "black", size = 3, stroke = 0.8) +
   scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
-  labs(title = "Similarity by Site, North",
-       x = "Longitude", y = "Latitude") +
+  annotation_scale(location = "bl", width_hint = 0.25, text_cex = 0.9) +
+  labs(x = NULL, y = NULL) +
   theme_minimal() +
   theme(plot.title = element_text(hjust = 0.5)) + 
   theme(panel.background = element_rect(fill = "lightblue", color = NA))
+northern_heat
+
+northern_heat_a <- ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") +
+  coord_sf(xlim = c(-113.0, -112.2), ylim = c(28.3, 29.0), expand = FALSE) +
+  scale_x_continuous(breaks = seq(-113.0, -112.2, by = 0.2)) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity), 
+             shape = 21, color = "black", size = 3, stroke = 0.8) +
+  scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
+  annotation_scale(location = "bl", width_hint = 0.25, text_cex = 0.9) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+northern_heat_a
+
+northern_heat_b <- ggplot() +
+  geom_sf(data = world, fill = "gray", color = "black") +
+  coord_sf(xlim = c(-113.8, -113.0), ylim = c(28.9, 29.6), expand = FALSE) +
+  scale_x_continuous(breaks = seq(-113.8, -113.0, by = 0.2)) +
+  geom_point(data = similarity_data, aes(x = lon, y = lat, fill = similarity), 
+             shape = 21, color = "black", size = 3, stroke = 0.8) +
+  scale_fill_distiller(name = "Similarity", palette = "PuRd", direction = 2) +
+  annotation_scale(location = "bl", width_hint = 0.25, text_cex = 0.9) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5)) + 
+  theme(panel.background = element_rect(fill = "lightblue", color = NA))
+northern_heat_b
 ```
 
 ```{r Linear regression}
