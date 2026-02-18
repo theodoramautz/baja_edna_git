@@ -14,14 +14,14 @@ library(here)
 
 ```{r files}
 # Edit as necessary to set the path to the directory where trimmed sequences are.
-path <- here("data", "baja_raw_sequences", "cutadapt-test")
+path <- here("data", "baja_raw_sequences", "field negatives", "cutadapt")
 list.files(path)
 ```
 
 ```{r filenames}
 # Set 'pattern' to whatever your forward and reverse files end with
-fnFs <- sort(list.files(path, pattern="_R1_001-trimmed.fastq", full.names = TRUE))
-fnRs <- sort(list.files(path, pattern="_R2_001-trimmed.fastq", full.names = TRUE))
+fnFs <- sort(list.files(path, pattern="_R1_001-trimmed.fastq.gz", full.names = TRUE))
+fnRs <- sort(list.files(path, pattern="_R2_001-trimmed.fastq.gz", full.names = TRUE))
 
 # Extract sample names, assuming filenames have format: SAMPLENAME-NUMBER_XXX.fastq
 sample.names <- sapply(strsplit(basename(fnFs), "_"), `[`, 2)
@@ -38,8 +38,8 @@ plotQualityProfile(fnFs[1:2])
 ```{r filter trim}
 # Place filtered files in subdirectory
 # _v2 added to file subdirectory to create a new one for prior rerun
-filtFs <- file.path(path, "dada2_filtered_v2", paste0(sample.names, "_F_filt.fastq.gz"))
-filtRs <- file.path(path, "dada2_filtered_v2", paste0(sample.names, "_R_filt.fastq.gz"))
+filtFs <- file.path(path, "dada2_filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+filtRs <- file.path(path, "dada2_filtered", paste0(sample.names, "_R_filt.fastq.gz"))
 names(filtFs) <- sample.names
 names(filtRs) <- sample.names
 
@@ -140,10 +140,10 @@ head(taxa.print)
 ```{r save files}
 # Save the taxa table (no read data) and read provenance table
 taxa.df <- as.data.frame(taxa)
-write.csv(taxa.df, here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_taxa_table_newseqs_v4.csv"), row.names=TRUE)
+write.csv(taxa.df, here("data", "edna_data", "MiFish", "field negatives", "Neg_Baja_MiFish_taxa_table.csv"), row.names=TRUE)
 
 track.df <- as.data.frame(track)
-write.csv(track.df, here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_reads_track_v4.csv"), row.names=TRUE)
+write.csv(track.df, here("data", "edna_data", "MiFish", "field negatives", "Neg_Baja_MiFish_reads_track.csv"), row.names=TRUE)
 
 # Create hash key and link each ASV to a unique hash
 seqtab.nochim.df <- as.data.frame(cleaned.seqtab.nochim.filt)
@@ -152,12 +152,12 @@ Hashes <- map_chr(colnames(seqtab.nochim.df), ~ digest(.x, algo = "sha1", serial
 conv_table <- tibble(Hash = Hashes, Sequence = colnames(seqtab.nochim.df))
 
 # Write hash key into a csv
-write_csv(conv_table, here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_hash_key_v4.csv"))
+write_csv(conv_table, here("data", "edna_data", "MiFish", "field negatives", "Neg_Baja_MiFish_hash_key.csv"))
 
 # Write hash key into a fasta
 write.fasta(sequences = as.list(conv_table$Sequence), 
             names = as.list(conv_table$Hash),
-            file.out = here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_ASVs_v4.fasta"))
+            file.out = here("data", "edna_data", "MiFish", "field negatives", "Neg_Baja_MiFish_ASVs.fasta"))
 
 # Make the ASV table
 sample.df <- tibble::rownames_to_column(seqtab.nochim.df, "Sample_name")
@@ -175,5 +175,5 @@ current_asv <- merge(current_asv, conv_table, by="Sequence") %>%
   relocate(Hash, .after=Label)
 
 # Write asv table into a csv
-write_csv(current_asv, here("data", "sequencing_data", "rerun_bioinformatics_newseqs", "Baja_MiFish_ASVs_v4.csv"))
+write_csv(current_asv, here("data", "edna_data", "MiFish", "field negatives", "Neg_Baja_MiFish_ASVs.csv"))
 ```
